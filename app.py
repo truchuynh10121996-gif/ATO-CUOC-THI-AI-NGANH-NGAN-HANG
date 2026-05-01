@@ -1,0 +1,616 @@
+import streamlit as st
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import io
+import warnings
+warnings.filterwarnings('ignore')
+
+st.set_page_config(
+    page_title="Fraud Detection ATO - Siamese Network",
+    page_icon="🔐",
+    layout="wide"
+)
+
+# ─────────────────────────────────────────────
+#  Persona definitions (20 users)
+# ─────────────────────────────────────────────
+PERSONAS = [
+    # (user_id, name, description, base_features dict)
+    {"id": "U001", "name": "Nguyễn Văn An",     "desc": "Nhân viên văn phòng, gõ nhẹ nhàng",
+     "avg_pressure": 0.35, "std_pressure": 0.03, "avg_touch_area": 120, "std_touch_area": 8,
+     "avg_touch_duration": 85,  "std_touch_duration": 6,  "avg_inter_gap": 180, "std_inter_gap": 15,
+     "avg_gyro_x": 0.05,  "std_gyro_x": 0.01, "avg_gyro_y": 0.03, "std_gyro_y": 0.01},
+
+    {"id": "U002", "name": "Trần Thị Bích",     "desc": "Sinh viên, nhấn mạnh tay",
+     "avg_pressure": 0.65, "std_pressure": 0.05, "avg_touch_area": 160, "std_touch_area": 12,
+     "avg_touch_duration": 110, "std_touch_duration": 9,  "avg_inter_gap": 140, "std_inter_gap": 20,
+     "avg_gyro_x": 0.12,  "std_gyro_x": 0.03, "avg_gyro_y": 0.08, "std_gyro_y": 0.02},
+
+    {"id": "U003", "name": "Lê Minh Châu",      "desc": "Gõ nhanh, áp lực trung bình",
+     "avg_pressure": 0.50, "std_pressure": 0.04, "avg_touch_area": 135, "std_touch_area": 10,
+     "avg_touch_duration": 70,  "std_touch_duration": 5,  "avg_inter_gap": 110, "std_inter_gap": 12,
+     "avg_gyro_x": 0.08,  "std_gyro_x": 0.02, "avg_gyro_y": 0.05, "std_gyro_y": 0.015},
+
+    {"id": "U004", "name": "Phạm Đức Dũng",     "desc": "Ngón tay to, nhấn chậm",
+     "avg_pressure": 0.72, "std_pressure": 0.06, "avg_touch_area": 185, "std_touch_area": 14,
+     "avg_touch_duration": 130, "std_touch_duration": 10, "avg_inter_gap": 220, "std_inter_gap": 25,
+     "avg_gyro_x": 0.04,  "std_gyro_x": 0.01, "avg_gyro_y": 0.02, "std_gyro_y": 0.01},
+
+    {"id": "U005", "name": "Hoàng Thị Emm",     "desc": "Người cao tuổi, gõ chậm rãi",
+     "avg_pressure": 0.40, "std_pressure": 0.05, "avg_touch_area": 145, "std_touch_area": 15,
+     "avg_touch_duration": 160, "std_touch_duration": 18, "avg_inter_gap": 300, "std_inter_gap": 40,
+     "avg_gyro_x": 0.15,  "std_gyro_x": 0.04, "avg_gyro_y": 0.12, "std_gyro_y": 0.03},
+
+    {"id": "U006", "name": "Vũ Quang Phúc",     "desc": "Game thủ, phản xạ nhanh",
+     "avg_pressure": 0.60, "std_pressure": 0.04, "avg_touch_area": 140, "std_touch_area": 9,
+     "avg_touch_duration": 55,  "std_touch_duration": 4,  "avg_inter_gap": 90,  "std_inter_gap": 10,
+     "avg_gyro_x": 0.20,  "std_gyro_x": 0.05, "avg_gyro_y": 0.15, "std_gyro_y": 0.04},
+
+    {"id": "U007", "name": "Đặng Thị Giang",    "desc": "Nhân viên kế toán, gõ đều đặn",
+     "avg_pressure": 0.45, "std_pressure": 0.02, "avg_touch_area": 125, "std_touch_area": 6,
+     "avg_touch_duration": 90,  "std_touch_duration": 4,  "avg_inter_gap": 160, "std_inter_gap": 10,
+     "avg_gyro_x": 0.06,  "std_gyro_x": 0.01, "avg_gyro_y": 0.04, "std_gyro_y": 0.01},
+
+    {"id": "U008", "name": "Bùi Anh Hùng",      "desc": "Lập trình viên, gõ không nhìn bàn phím",
+     "avg_pressure": 0.55, "std_pressure": 0.03, "avg_touch_area": 130, "std_touch_area": 8,
+     "avg_touch_duration": 75,  "std_touch_duration": 5,  "avg_inter_gap": 100, "std_inter_gap": 11,
+     "avg_gyro_x": 0.07,  "std_gyro_x": 0.02, "avg_gyro_y": 0.06, "std_gyro_y": 0.015},
+
+    {"id": "U009", "name": "Ngô Thị Iris",      "desc": "Bác sĩ, tay nhỏ gọn",
+     "avg_pressure": 0.30, "std_pressure": 0.03, "avg_touch_area": 100, "std_touch_area": 7,
+     "avg_touch_duration": 80,  "std_touch_duration": 6,  "avg_inter_gap": 170, "std_inter_gap": 14,
+     "avg_gyro_x": 0.05,  "std_gyro_x": 0.01, "avg_gyro_y": 0.03, "std_gyro_y": 0.01},
+
+    {"id": "U010", "name": "Trịnh Văn Khoa",    "desc": "Sinh viên, hay dùng 2 tay",
+     "avg_pressure": 0.48, "std_pressure": 0.06, "avg_touch_area": 115, "std_touch_area": 11,
+     "avg_touch_duration": 65,  "std_touch_duration": 8,  "avg_inter_gap": 120, "std_inter_gap": 18,
+     "avg_gyro_x": 0.10,  "std_gyro_x": 0.03, "avg_gyro_y": 0.07, "std_gyro_y": 0.02},
+
+    {"id": "U011", "name": "Lý Thị Lan",        "desc": "Giáo viên, cẩn thận từng phím",
+     "avg_pressure": 0.42, "std_pressure": 0.03, "avg_touch_area": 128, "std_touch_area": 7,
+     "avg_touch_duration": 105, "std_touch_duration": 7,  "avg_inter_gap": 200, "std_inter_gap": 16,
+     "avg_gyro_x": 0.06,  "std_gyro_x": 0.01, "avg_gyro_y": 0.04, "std_gyro_y": 0.01},
+
+    {"id": "U012", "name": "Đinh Văn Mạnh",     "desc": "Tài xế, dùng điện thoại lúc nghỉ",
+     "avg_pressure": 0.68, "std_pressure": 0.07, "avg_touch_area": 170, "std_touch_area": 16,
+     "avg_touch_duration": 120, "std_touch_duration": 12, "avg_inter_gap": 250, "std_inter_gap": 35,
+     "avg_gyro_x": 0.18,  "std_gyro_x": 0.05, "avg_gyro_y": 0.13, "std_gyro_y": 0.04},
+
+    {"id": "U013", "name": "Phan Thị Nga",      "desc": "Người dùng một tay",
+     "avg_pressure": 0.52, "std_pressure": 0.05, "avg_touch_area": 138, "std_touch_area": 12,
+     "avg_touch_duration": 95,  "std_touch_duration": 8,  "avg_inter_gap": 155, "std_inter_gap": 18,
+     "avg_gyro_x": 0.22,  "std_gyro_x": 0.06, "avg_gyro_y": 0.18, "std_gyro_y": 0.05},
+
+    {"id": "U014", "name": "Cao Minh Oanh",     "desc": "Nhà thiết kế, thao tác nhanh nhẹn",
+     "avg_pressure": 0.38, "std_pressure": 0.03, "avg_touch_area": 112, "std_touch_area": 8,
+     "avg_touch_duration": 60,  "std_touch_duration": 5,  "avg_inter_gap": 95,  "std_inter_gap": 10,
+     "avg_gyro_x": 0.09,  "std_gyro_x": 0.02, "avg_gyro_y": 0.06, "std_gyro_y": 0.015},
+
+    {"id": "U015", "name": "Hà Văn Phong",      "desc": "Bảo vệ, ngón tay thô",
+     "avg_pressure": 0.78, "std_pressure": 0.07, "avg_touch_area": 200, "std_touch_area": 18,
+     "avg_touch_duration": 145, "std_touch_duration": 14, "avg_inter_gap": 280, "std_inter_gap": 38,
+     "avg_gyro_x": 0.03,  "std_gyro_x": 0.01, "avg_gyro_y": 0.02, "std_gyro_y": 0.01},
+
+    {"id": "U016", "name": "Trương Thị Quỳnh",  "desc": "Nhân viên ngân hàng, thao tác chính xác",
+     "avg_pressure": 0.46, "std_pressure": 0.02, "avg_touch_area": 122, "std_touch_area": 5,
+     "avg_touch_duration": 88,  "std_touch_duration": 4,  "avg_inter_gap": 165, "std_inter_gap": 9,
+     "avg_gyro_x": 0.05,  "std_gyro_x": 0.01, "avg_gyro_y": 0.03, "std_gyro_y": 0.01},
+
+    {"id": "U017", "name": "Mai Đình Rồng",     "desc": "Học sinh cấp 3, gõ bằng ngón cái",
+     "avg_pressure": 0.58, "std_pressure": 0.05, "avg_touch_area": 148, "std_touch_area": 13,
+     "avg_touch_duration": 72,  "std_touch_duration": 7,  "avg_inter_gap": 115, "std_inter_gap": 15,
+     "avg_gyro_x": 0.14,  "std_gyro_x": 0.04, "avg_gyro_y": 0.10, "std_gyro_y": 0.03},
+
+    {"id": "U018", "name": "Lưu Thị Sen",       "desc": "Nội trợ, thao tác chậm và cẩn thận",
+     "avg_pressure": 0.43, "std_pressure": 0.04, "avg_touch_area": 132, "std_touch_area": 10,
+     "avg_touch_duration": 118, "std_touch_duration": 11, "avg_inter_gap": 230, "std_inter_gap": 28,
+     "avg_gyro_x": 0.11,  "std_gyro_x": 0.03, "avg_gyro_y": 0.08, "std_gyro_y": 0.02},
+
+    {"id": "U019", "name": "Đỗ Quốc Tuấn",      "desc": "Kỹ sư, dùng cả 2 ngón trỏ",
+     "avg_pressure": 0.53, "std_pressure": 0.04, "avg_touch_area": 142, "std_touch_area": 11,
+     "avg_touch_duration": 82,  "std_touch_duration": 6,  "avg_inter_gap": 145, "std_inter_gap": 13,
+     "avg_gyro_x": 0.07,  "std_gyro_x": 0.02, "avg_gyro_y": 0.05, "std_gyro_y": 0.015},
+
+    {"id": "U020", "name": "Nguyễn Thị Uyên",   "desc": "Streamer, thao tác liên tục",
+     "avg_pressure": 0.62, "std_pressure": 0.05, "avg_touch_area": 152, "std_touch_area": 11,
+     "avg_touch_duration": 58,  "std_touch_duration": 4,  "avg_inter_gap": 85,  "std_inter_gap": 9,
+     "avg_gyro_x": 0.25,  "std_gyro_x": 0.07, "avg_gyro_y": 0.20, "std_gyro_y": 0.06},
+]
+
+FEATURE_COLS = [
+    "avg_pressure", "std_pressure",
+    "avg_touch_area", "std_touch_area",
+    "avg_touch_duration", "std_touch_duration",
+    "avg_inter_gap", "std_inter_gap",
+    "avg_gyro_x", "std_gyro_x",
+    "avg_gyro_y", "std_gyro_y",
+]
+
+# ─────────────────────────────────────────────
+#  Helper: generate noisy sessions for a persona
+# ─────────────────────────────────────────────
+def generate_sessions(persona: dict, n_sessions: int, seed: int = 42) -> pd.DataFrame:
+    rng = np.random.default_rng(seed + hash(persona["id"]) % 10000)
+    rows = []
+    for i in range(n_sessions):
+        row = {"user_id": persona["id"], "user_name": persona["name"],
+               "session_id": f"{persona['id']}_S{i+1:03d}"}
+        for feat in FEATURE_COLS:
+            base = persona[feat]
+            noise_ratio = 0.08 if feat.startswith("avg") else 0.12
+            noise = rng.normal(0, abs(base) * noise_ratio)
+            val = base + noise
+            if feat.startswith("std"):
+                val = max(val, 1e-4)
+            row[feat] = round(val, 5)
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+# ─────────────────────────────────────────────
+#  Build Siamese Model
+# ─────────────────────────────────────────────
+@st.cache_resource
+def build_siamese_model():
+    import tensorflow as tf
+    from tensorflow.keras.layers import Input, Dense, Lambda
+    from tensorflow.keras.models import Model
+
+    def build_mlp():
+        inp = Input(shape=(12,))
+        x = Dense(64, activation='relu')(inp)
+        x = Dense(32, activation='relu')(x)
+        x = Dense(16)(x)
+        return Model(inp, x, name="shared_mlp")
+
+    mlp = build_mlp()
+
+    input_1 = Input(shape=(12,), name="session_A")
+    input_2 = Input(shape=(12,), name="session_B")
+
+    embed_1 = mlp(input_1)
+    embed_2 = mlp(input_2)
+
+    distance = Lambda(
+        lambda x: tf.sqrt(tf.reduce_sum(tf.square(x[0] - x[1]), axis=1, keepdims=True) + 1e-8),
+        name="euclidean_distance"
+    )([embed_1, embed_2])
+
+    output = Dense(1, activation='sigmoid', name="similarity_score")(distance)
+
+    model = Model([input_1, input_2], output, name="siamese_network")
+    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+    return model, mlp
+
+
+# ─────────────────────────────────────────────
+#  Generate training pairs
+# ─────────────────────────────────────────────
+def generate_pairs(df: pd.DataFrame, n_same: int = 500, n_diff: int = 500, seed: int = 99) -> pd.DataFrame:
+    rng = np.random.default_rng(seed)
+    users = df["user_id"].unique()
+    pairs = []
+
+    # Same-user pairs (label = 1)
+    for _ in range(n_same):
+        uid = rng.choice(users)
+        sessions = df[df["user_id"] == uid]
+        if len(sessions) < 2:
+            continue
+        idx = rng.choice(len(sessions), 2, replace=False)
+        s1, s2 = sessions.iloc[idx[0]], sessions.iloc[idx[1]]
+        row = {}
+        for f in FEATURE_COLS:
+            row[f"A_{f}"] = s1[f]
+            row[f"B_{f}"] = s2[f]
+        row["user_A"] = s1["user_id"]
+        row["user_B"] = s2["user_id"]
+        row["label"] = 1
+        row["label_text"] = "Cùng người"
+        pairs.append(row)
+
+    # Different-user pairs (label = 0)
+    for _ in range(n_diff):
+        uid_a, uid_b = rng.choice(users, 2, replace=False)
+        s1 = df[df["user_id"] == uid_a].iloc[rng.integers(len(df[df["user_id"] == uid_a]))]
+        s2 = df[df["user_id"] == uid_b].iloc[rng.integers(len(df[df["user_id"] == uid_b]))]
+        row = {}
+        for f in FEATURE_COLS:
+            row[f"A_{f}"] = s1[f]
+            row[f"B_{f}"] = s2[f]
+        row["user_A"] = uid_a
+        row["user_B"] = uid_b
+        row["label"] = 0
+        row["label_text"] = "Khác người"
+        pairs.append(row)
+
+    return pd.DataFrame(pairs).sample(frac=1, random_state=seed).reset_index(drop=True)
+
+
+# ─────────────────────────────────────────────
+#  Streamlit UI
+# ─────────────────────────────────────────────
+st.title("🔐 Fraud Detection ATO — Siamese Network + MLP")
+st.markdown(
+    "> **Câu hỏi cốt lõi:** *User hiện tại có giống chính họ trong quá khứ không?*  \n"
+    "> Ứng dụng sinh trắc học hành vi (behavioral biometrics) trên thiết bị di động."
+)
+
+tab1, tab2 = st.tabs(["📊 Tab 1 — Tạo Data Giả Lập", "🧠 Tab 2 — Siamese Network + MLP"])
+
+# ══════════════════════════════════════════════
+#  TAB 1
+# ══════════════════════════════════════════════
+with tab1:
+    st.header("📊 Tạo Bộ Dữ Liệu Giả Lập")
+    st.markdown(
+        "Sinh dữ liệu hành vi cho **20 user** với **12 features** mỗi người.  \n"
+        "Mỗi user sẽ có nhiều session với noise thực tế."
+    )
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        n_sessions = st.slider("Số session mỗi user", 20, 50, 25)
+    with col2:
+        noise_seed = st.number_input("Random seed", 0, 9999, 42)
+    with col3:
+        show_persona = st.checkbox("Hiện bảng persona", value=True)
+
+    if show_persona:
+        persona_df = pd.DataFrame([
+            {"User ID": p["id"], "Tên": p["name"], "Đặc điểm": p["desc"]}
+            for p in PERSONAS
+        ])
+        st.dataframe(persona_df, use_container_width=True, hide_index=True)
+
+    if st.button("🚀 Tạo Dữ Liệu", type="primary", key="gen_data"):
+        with st.spinner("Đang tạo dữ liệu..."):
+            dfs = []
+            for p in PERSONAS:
+                dfs.append(generate_sessions(p, n_sessions, seed=int(noise_seed)))
+            full_df = pd.concat(dfs, ignore_index=True)
+            st.session_state["raw_df"] = full_df
+
+        st.success(f"✅ Đã tạo **{len(full_df)} sessions** cho 20 users!")
+
+        # Preview
+        st.subheader("Xem trước dữ liệu")
+        st.dataframe(full_df.head(30), use_container_width=True, hide_index=True)
+
+        # Statistics
+        st.subheader("Thống kê tổng quan")
+        col_a, col_b, col_c = st.columns(3)
+        col_a.metric("Tổng sessions", len(full_df))
+        col_b.metric("Số users", full_df["user_id"].nunique())
+        col_c.metric("Số features", len(FEATURE_COLS))
+
+        # Distribution plot
+        st.subheader("Phân bố avg_pressure theo từng user")
+        fig, ax = plt.subplots(figsize=(14, 5))
+        for p in PERSONAS:
+            uid_df = full_df[full_df["user_id"] == p["id"]]
+            ax.scatter(
+                [p["id"]] * len(uid_df), uid_df["avg_pressure"],
+                alpha=0.4, s=20, label=p["id"]
+            )
+        ax.set_xlabel("User ID")
+        ax.set_ylabel("avg_pressure")
+        ax.set_title("Phân bố avg_pressure — mỗi chấm là 1 session")
+        plt.xticks(rotation=45, fontsize=7)
+        plt.tight_layout()
+        st.pyplot(fig)
+        plt.close()
+
+        # Download raw CSV
+        csv_raw = full_df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "⬇️ Tải xuống Raw Data CSV",
+            data=csv_raw,
+            file_name="ato_behavioral_data.csv",
+            mime="text/csv",
+        )
+
+    # ── Tạo pair dataset ──────────────────────────────────
+    st.divider()
+    st.subheader("🔗 Tạo Bộ Dữ Liệu Cặp (Pair Dataset)")
+    st.markdown("Ghép các session thành cặp để train Siamese Network.")
+
+    col_p1, col_p2 = st.columns(2)
+    with col_p1:
+        n_same_pairs = st.slider("Số cặp cùng người (label=1)", 200, 1000, 500, step=50)
+    with col_p2:
+        n_diff_pairs = st.slider("Số cặp khác người (label=0)", 200, 1000, 500, step=50)
+
+    if st.button("🔗 Tạo Pair Dataset", key="gen_pairs"):
+        if "raw_df" not in st.session_state:
+            st.warning("⚠️ Hãy tạo Raw Data trước!")
+        else:
+            with st.spinner("Đang tạo cặp dữ liệu..."):
+                pair_df = generate_pairs(
+                    st.session_state["raw_df"], n_same_pairs, n_diff_pairs
+                )
+                st.session_state["pair_df"] = pair_df
+
+            st.success(f"✅ Đã tạo **{len(pair_df)} cặp** ({n_same_pairs} cùng + {n_diff_pairs} khác)!")
+            st.dataframe(pair_df.head(20), use_container_width=True, hide_index=True)
+
+            col_d1, col_d2 = st.columns(2)
+            col_d1.metric("Cặp cùng người", int((pair_df["label"] == 1).sum()))
+            col_d2.metric("Cặp khác người", int((pair_df["label"] == 0).sum()))
+
+            csv_pair = pair_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "⬇️ Tải xuống Pair Dataset CSV",
+                data=csv_pair,
+                file_name="ato_pair_dataset.csv",
+                mime="text/csv",
+            )
+
+# ══════════════════════════════════════════════
+#  TAB 2
+# ══════════════════════════════════════════════
+with tab2:
+    st.header("🧠 Siamese Network + MLP Training & Demo")
+
+    # ── Architecture diagram ─────────────────────────────
+    st.subheader("Kiến Trúc Tổng Thể")
+    st.code(
+        """
+Session_A → [12 features] → ┐
+                              ├─ Shared MLP (64→32→16) → Embedding_A ─┐
+Session_B → [12 features] → ┘                                          ├→ Euclidean Distance → Sigmoid → Score [0,1]
+                                              Embedding_B ─────────────┘
+
+Score ≥ 0.5  →  ✅ Cùng người (Legitimate)
+Score  < 0.5 →  ❌ Khác người (FRAUD / ATO)
+        """,
+        language="text",
+    )
+
+    # ── Training section ─────────────────────────────────
+    st.subheader("🏋️ Huấn Luyện Mô Hình")
+
+    if "pair_df" not in st.session_state:
+        st.info("ℹ️ Vui lòng tạo Pair Dataset ở Tab 1 trước.")
+    else:
+        pair_df = st.session_state["pair_df"]
+
+        col_t1, col_t2, col_t3 = st.columns(3)
+        with col_t1:
+            epochs = st.slider("Số epochs", 5, 100, 30)
+        with col_t2:
+            batch_size = st.selectbox("Batch size", [16, 32, 64, 128], index=1)
+        with col_t3:
+            test_split = st.slider("Test split %", 10, 40, 20)
+
+        if st.button("🏋️ Train Siamese Network", type="primary", key="train_btn"):
+            import tensorflow as tf
+            from sklearn.model_selection import train_test_split
+            from sklearn.preprocessing import StandardScaler
+
+            with st.spinner("Đang xây dựng và train mô hình..."):
+                feat_A = [f"A_{f}" for f in FEATURE_COLS]
+                feat_B = [f"B_{f}" for f in FEATURE_COLS]
+
+                X_A = pair_df[feat_A].values.astype(np.float32)
+                X_B = pair_df[feat_B].values.astype(np.float32)
+                y   = pair_df["label"].values.astype(np.float32)
+
+                # Normalize all features together
+                all_X = np.vstack([X_A, X_B])
+                scaler = StandardScaler()
+                scaler.fit(all_X)
+                X_A_scaled = scaler.transform(X_A)
+                X_B_scaled = scaler.transform(X_B)
+
+                (XA_tr, XA_te, XB_tr, XB_te, y_tr, y_te) = train_test_split(
+                    X_A_scaled, X_B_scaled, y,
+                    test_size=test_split / 100, random_state=42, stratify=y
+                )
+
+                model, mlp_backbone = build_siamese_model()
+                st.session_state["scaler"] = scaler
+                st.session_state["mlp_backbone"] = mlp_backbone
+                st.session_state["model"] = model
+
+                history_store = {"loss": [], "val_loss": [], "accuracy": [], "val_accuracy": []}
+                progress_bar = st.progress(0)
+                status_text  = st.empty()
+
+                class StreamlitCallback(tf.keras.callbacks.Callback):
+                    def on_epoch_end(self, epoch, logs=None):
+                        logs = logs or {}
+                        history_store["loss"].append(logs.get("loss", 0))
+                        history_store["val_loss"].append(logs.get("val_loss", 0))
+                        history_store["accuracy"].append(logs.get("accuracy", 0))
+                        history_store["val_accuracy"].append(logs.get("val_accuracy", 0))
+                        pct = int((epoch + 1) / epochs * 100)
+                        progress_bar.progress(pct)
+                        status_text.text(
+                            f"Epoch {epoch+1}/{epochs} — "
+                            f"loss: {logs.get('loss',0):.4f} | "
+                            f"val_loss: {logs.get('val_loss',0):.4f} | "
+                            f"val_acc: {logs.get('val_accuracy',0):.4f}"
+                        )
+
+                model.fit(
+                    [XA_tr, XB_tr], y_tr,
+                    validation_data=([XA_te, XB_te], y_te),
+                    epochs=epochs,
+                    batch_size=batch_size,
+                    callbacks=[StreamlitCallback()],
+                    verbose=0,
+                )
+
+                st.session_state["XA_te"] = XA_te
+                st.session_state["XB_te"] = XB_te
+                st.session_state["y_te"]  = y_te
+                st.session_state["history"] = history_store
+
+            st.success("✅ Huấn luyện hoàn tất!")
+
+            # Training curves
+            st.subheader("📈 Đường Cong Học Tập")
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+
+            h = history_store
+            ax1.plot(h["loss"],     label="Train Loss",      color="#e74c3c")
+            ax1.plot(h["val_loss"], label="Validation Loss",  color="#e67e22", linestyle="--")
+            ax1.set_title("Loss"); ax1.set_xlabel("Epoch"); ax1.legend()
+
+            ax2.plot(h["accuracy"],     label="Train Accuracy",     color="#2980b9")
+            ax2.plot(h["val_accuracy"], label="Validation Accuracy", color="#27ae60", linestyle="--")
+            ax2.set_title("Accuracy"); ax2.set_xlabel("Epoch"); ax2.legend()
+
+            plt.tight_layout()
+            st.pyplot(fig)
+            plt.close()
+
+            # Evaluation
+            from sklearn.metrics import (
+                classification_report, confusion_matrix, roc_auc_score
+            )
+            preds = model.predict([XA_te, XB_te], verbose=0).flatten()
+            pred_labels = (preds >= 0.5).astype(int)
+
+            auc = roc_auc_score(y_te, preds)
+            col_m1, col_m2, col_m3 = st.columns(3)
+            col_m1.metric("AUC-ROC", f"{auc:.4f}")
+            col_m2.metric("Accuracy", f"{np.mean(pred_labels == y_te):.4f}")
+            col_m3.metric("Test samples", len(y_te))
+
+            # Confusion matrix
+            st.subheader("Confusion Matrix")
+            cm = confusion_matrix(y_te, pred_labels)
+            fig_cm, ax_cm = plt.subplots(figsize=(5, 4))
+            sns.heatmap(
+                cm, annot=True, fmt="d", cmap="Blues", ax=ax_cm,
+                xticklabels=["Khác người (0)", "Cùng người (1)"],
+                yticklabels=["Khác người (0)", "Cùng người (1)"],
+            )
+            ax_cm.set_xlabel("Predicted"); ax_cm.set_ylabel("Actual")
+            plt.tight_layout()
+            st.pyplot(fig_cm)
+            plt.close()
+
+            # Score distribution
+            st.subheader("Phân bố Score dự đoán")
+            fig_s, ax_s = plt.subplots(figsize=(8, 4))
+            ax_s.hist(preds[y_te == 1], bins=30, alpha=0.6, label="Cùng người (1)", color="#27ae60")
+            ax_s.hist(preds[y_te == 0], bins=30, alpha=0.6, label="Khác người (0)", color="#e74c3c")
+            ax_s.axvline(0.5, color="black", linestyle="--", label="Ngưỡng 0.5")
+            ax_s.set_xlabel("Score"); ax_s.set_ylabel("Số lượng")
+            ax_s.set_title("Phân bố Score — mô hình càng tốt khi 2 đỉnh tách xa nhau")
+            ax_s.legend()
+            plt.tight_layout()
+            st.pyplot(fig_s)
+            plt.close()
+
+    # ── Live Demo ────────────────────────────────────────
+    st.divider()
+    st.subheader("🎯 Demo Live — Kiểm Tra Một Session Mới")
+    st.markdown(
+        "Chọn **user gốc** (reference) và nhập hoặc sinh ngẫu nhiên một session mới. "
+        "Mô hình sẽ cho biết session mới có phải cùng người không."
+    )
+
+    if "model" not in st.session_state:
+        st.info("ℹ️ Vui lòng train mô hình trước.")
+    else:
+        model  = st.session_state["model"]
+        scaler = st.session_state["scaler"]
+        raw_df = st.session_state.get("raw_df", None)
+
+        if raw_df is None:
+            st.warning("Cần có Raw Data từ Tab 1.")
+        else:
+            col_d1, col_d2 = st.columns(2)
+            with col_d1:
+                ref_user_id = st.selectbox(
+                    "Chọn User Gốc (Reference)",
+                    options=[p["id"] for p in PERSONAS],
+                    format_func=lambda x: f"{x} — {next(p['name'] for p in PERSONAS if p['id']==x)}"
+                )
+            with col_d2:
+                test_scenario = st.radio(
+                    "Kịch bản test",
+                    ["✅ Cùng người (nhập nhiễu nhẹ)", "❌ Kẻ gian mạo danh (user khác)"],
+                    horizontal=True
+                )
+
+            if st.button("🔍 Kiểm Tra Ngay", key="demo_btn"):
+                ref_sessions = raw_df[raw_df["user_id"] == ref_user_id]
+                ref_vec = ref_sessions[FEATURE_COLS].mean().values.astype(np.float32)
+
+                if "Cùng người" in test_scenario:
+                    rng_d = np.random.default_rng(77)
+                    noise = rng_d.normal(0, np.abs(ref_vec) * 0.07)
+                    new_vec = (ref_vec + noise).astype(np.float32)
+                    true_label = "Cùng người"
+                else:
+                    other_users = [p for p in PERSONAS if p["id"] != ref_user_id]
+                    imposter = np.random.choice(other_users)
+                    imp_sessions = raw_df[raw_df["user_id"] == imposter["id"]]
+                    new_vec = imp_sessions[FEATURE_COLS].mean().values.astype(np.float32)
+                    true_label = f"Kẻ gian ({imposter['name']})"
+
+                ref_scaled = scaler.transform(ref_vec.reshape(1, -1))
+                new_scaled = scaler.transform(new_vec.reshape(1, -1))
+
+                score = float(model.predict(
+                    [ref_scaled, new_scaled], verbose=0
+                ).flatten()[0])
+
+                mlp = st.session_state["mlp_backbone"]
+                emb_ref = mlp.predict(ref_scaled, verbose=0).flatten()
+                emb_new = mlp.predict(new_scaled, verbose=0).flatten()
+                dist    = float(np.sqrt(np.sum((emb_ref - emb_new) ** 2)))
+
+                st.markdown("---")
+                col_r1, col_r2, col_r3 = st.columns(3)
+                col_r1.metric("Similarity Score", f"{score:.4f}", help="Gần 1 = cùng người")
+                col_r2.metric("Euclidean Distance", f"{dist:.4f}", help="Gần 0 = cùng người")
+                verdict = "✅ Hợp lệ (Cùng người)" if score >= 0.5 else "❌ FRAUD / ATO (Khác người)"
+                col_r3.metric("Kết quả", verdict)
+
+                verdict_color = "#27ae60" if score >= 0.5 else "#e74c3c"
+                st.markdown(
+                    f"<div style='background:{verdict_color};color:white;padding:16px;"
+                    f"border-radius:8px;font-size:20px;text-align:center'>"
+                    f"{verdict} &nbsp;|&nbsp; Ground truth: <b>{true_label}</b></div>",
+                    unsafe_allow_html=True,
+                )
+
+                # Embedding visualization
+                st.subheader("So sánh Embedding Vector (16 chiều)")
+                fig_e, ax_e = plt.subplots(figsize=(10, 3))
+                x_idx = np.arange(16)
+                ax_e.bar(x_idx - 0.2, emb_ref, 0.4, label="Reference (user gốc)", color="#2980b9", alpha=0.8)
+                ax_e.bar(x_idx + 0.2, emb_new, 0.4, label="Session mới",          color="#e74c3c", alpha=0.8)
+                ax_e.set_xlabel("Dimension"); ax_e.set_ylabel("Giá trị")
+                ax_e.set_title("Embedding 16D — càng giống nhau thì score càng cao")
+                ax_e.legend()
+                plt.tight_layout()
+                st.pyplot(fig_e)
+                plt.close()
+
+    # ── Export pair data ─────────────────────────────────
+    st.divider()
+    st.subheader("⬇️ Export Pair Data (đã dùng để train)")
+    if "pair_df" in st.session_state:
+        csv_pair = st.session_state["pair_df"].to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "⬇️ Tải Pair Dataset CSV",
+            data=csv_pair,
+            file_name="ato_pair_dataset.csv",
+            mime="text/csv",
+        )
+        st.dataframe(
+            st.session_state["pair_df"][["user_A", "user_B", "label", "label_text"]
+            ].value_counts().reset_index(name="count"),
+            use_container_width=True, hide_index=True
+        )
+    else:
+        st.info("Tạo Pair Dataset ở Tab 1 trước.")
