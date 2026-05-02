@@ -4,6 +4,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import io
+import os
+import tempfile
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -150,6 +152,104 @@ def generate_sessions(persona: dict, n_sessions: int, seed: int = 42) -> pd.Data
 
 
 # ─────────────────────────────────────────────
+#  rPPG helpers
+# ─────────────────────────────────────────────
+def save_uploaded_video(uploaded_file) -> str:
+    suffix = "." + uploaded_file.name.rsplit(".", 1)[-1]
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    tmp.write(uploaded_file.read())
+    tmp.close()
+    return tmp.name
+
+
+def extract_rppg_signal(video_path: str, max_frames: int = 300):
+    import cv2
+    face_cascade = cv2.CascadeClassifier(
+        cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+    )
+    cap = cv2.VideoCapture(video_path)
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    if fps <= 0:
+        fps = 30.0
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    n_process = min(max_frames, total)
+
+    green_vals = []
+    n_detected = 0
+    last_roi = None
+
+    for _ in range(n_process):
+        ret, frame = cap.read()
+        if not ret:
+            break
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(
+            gray, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60)
+        )
+        if len(faces) > 0:
+            x, y, w, h = max(faces, key=lambda f: f[2] * f[3])
+            # Forehead ROI: top 30% of face, centre 50% width
+            last_roi = (
+                y + int(h * 0.08), y + int(h * 0.38),
+                x + int(w * 0.25), x + int(w * 0.75),
+            )
+            n_detected += 1
+        if last_roi:
+            y1, y2, x1, x2 = last_roi
+            roi = frame[y1:y2, x1:x2]
+            if roi.size > 0:
+                green_vals.append(float(np.mean(roi[:, :, 1])))  # BGR → index 1 = Green
+            elif green_vals:
+                green_vals.append(green_vals[-1])
+        else:
+            green_vals.append(128.0)
+
+    cap.release()
+    return np.array(green_vals, dtype=np.float32), fps, n_detected, len(green_vals)
+
+
+def bandpass_filter_signal(signal: np.ndarray, fps: float,
+                           low: float = 0.75, high: float = 4.0) -> np.ndarray:
+    from scipy.signal import butter, filtfilt, detrend
+    if len(signal) < 30:
+        return signal
+    sig = detrend(signal.astype(np.float64))
+    nyq = fps / 2.0
+    lo, hi = low / nyq, min(high / nyq, 0.98)
+    if lo <= 0 or lo >= hi:
+        return sig
+    try:
+        b, a = butter(3, [lo, hi], btype="band")
+        return filtfilt(b, a, sig)
+    except Exception:
+        return sig
+
+
+def compute_vitals(raw_signal: np.ndarray, fps: float):
+    """
+    Quality = tỉ lệ năng lượng PHỔ TẦN SỐ của tín hiệu thô nằm trong băng nhịp tim.
+    Tính trên tín hiệu DETRENDED (chưa lọc) để phân biệt thật/deepfake rõ ràng:
+      - Người thật: hầu hết năng lượng tập trung tại 1 tần số nhịp tim → quality cao
+      - Deepfake:   năng lượng phân tán đều (nhiễu trắng) → quality thấp (~bandwidth ratio)
+    """
+    from scipy.signal import periodogram, detrend
+    if len(raw_signal) < 15:
+        return 0.0, 0.0, np.array([0.0]), np.array([0.0])
+    sig      = detrend(raw_signal.astype(np.float64))
+    freqs, psd = periodogram(sig, fps)
+    hr_band  = (freqs >= 0.75) & (freqs <= 4.0)
+    all_band = freqs > 0
+    if not np.any(hr_band):
+        return 0.0, 0.0, freqs, psd
+    hr_power    = float(np.sum(psd[hr_band]))
+    total_power = float(np.sum(psd[all_band])) + 1e-12
+    quality     = hr_power / total_power
+    peak_freq   = float(freqs[hr_band][np.argmax(psd[hr_band])])
+    hr_bpm      = peak_freq * 60.0
+    return hr_bpm, quality, freqs, psd
+
+
+# ─────────────────────────────────────────────
 #  Build Siamese Model
 # ─────────────────────────────────────────────
 @st.cache_resource
@@ -238,7 +338,11 @@ st.markdown(
     "> Ứng dụng sinh trắc học hành vi (behavioral biometrics) trên thiết bị di động."
 )
 
-tab1, tab2 = st.tabs(["📊 Tab 1 — Tạo Data Giả Lập", "🧠 Tab 2 — Siamese Network + MLP"])
+tab1, tab2, tab3 = st.tabs([
+    "📊 Tab 1 — Tạo Data Giả Lập",
+    "🧠 Tab 2 — Siamese Network + MLP",
+    "🫀 Tab 3 — Demo rPPG Deepfake",
+])
 
 # ══════════════════════════════════════════════
 #  TAB 1
@@ -614,3 +718,325 @@ Score  < 0.5 →  ❌ Khác người (FRAUD / ATO)
         )
     else:
         st.info("Tạo Pair Dataset ở Tab 1 trước.")
+
+# ══════════════════════════════════════════════
+#  TAB 3 — rPPG DEEPFAKE DETECTION
+# ══════════════════════════════════════════════
+with tab3:
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+
+    st.header("🫀 rPPG — Phát Hiện Deepfake Qua Tín Hiệu Sự Sống")
+    st.markdown(
+        "**Nguyên lý cốt lõi:**  \n"
+        "Mặt người thật → máu lưu thông → kênh **GREEN** của camera "
+        "dao động nhẹ theo từng nhịp tim.  \n"
+        "Deepfake là ảnh/video tổng hợp → **không có tín hiệu sinh học** → "
+        "GREEN channel phẳng hoặc nhiễu loạn ngẫu nhiên."
+    )
+
+    st.code(
+        """
+Pipeline rPPG:
+  Video → Phát hiện khuôn mặt (Haar Cascade)
+        → Cắt vùng trán (ROI: top 30% khuôn mặt)
+        → Trung bình kênh GREEN mỗi frame
+        → Tín hiệu thô theo thời gian
+        → Bandpass filter  0.75 – 4.0 Hz  (tương đương 45–240 BPM)
+        → Phân tích phổ tần số (FFT)
+
+  Người thật  →  sóng tuần hoàn rõ ràng  →  đỉnh FFT sắc nét   ✅
+  Deepfake    →  tín hiệu phẳng / nhiễu  →  không có đỉnh FFT  ❌
+        """,
+        language="text",
+    )
+
+    # ── Upload section ────────────────────────────────────
+    st.subheader("📤 Tải Lên Video")
+    st.caption(
+        "Hỗ trợ MP4 / AVI / MOV / MKV. "
+        "Khuyến nghị: video 10–30 giây, khuôn mặt nhìn thẳng, ánh sáng đủ."
+    )
+
+    col_u1, col_u2 = st.columns(2)
+    with col_u1:
+        st.markdown(
+            "<div style='background:#eafaf1;border-left:4px solid #27ae60;"
+            "padding:10px;border-radius:4px'><b>🟢 Video Người Thật</b></div>",
+            unsafe_allow_html=True,
+        )
+        real_file = st.file_uploader(
+            "Chọn video người thật", type=["mp4", "avi", "mov", "mkv"], key="real_vid"
+        )
+    with col_u2:
+        st.markdown(
+            "<div style='background:#fdedec;border-left:4px solid #e74c3c;"
+            "padding:10px;border-radius:4px'><b>🔴 Video Deepfake</b></div>",
+            unsafe_allow_html=True,
+        )
+        fake_file = st.file_uploader(
+            "Chọn video deepfake", type=["mp4", "avi", "mov", "mkv"], key="fake_vid"
+        )
+
+    # ── Config ───────────────────────────────────────────
+    st.divider()
+    col_cfg1, col_cfg2 = st.columns(2)
+    with col_cfg1:
+        max_frames = st.slider(
+            "Số frame tối đa xử lý", 100, 600, 300, step=50,
+            help="Nhiều frame = chính xác hơn nhưng mất thêm vài giây"
+        )
+    with col_cfg2:
+        quality_threshold = st.slider(
+            "Ngưỡng 'Có Sự Sống' (%)", 5, 50, 28,
+            help="Người thật: thường 30–95% | Deepfake (nhiễu): thường 15–25%. Mặc định 28% là điểm tách tốt."
+        )
+
+    # ── Run analysis ─────────────────────────────────────
+    if st.button("🔬 Phân Tích rPPG", type="primary", key="rppg_btn"):
+        if real_file is None and fake_file is None:
+            st.warning("⚠️ Vui lòng tải lên ít nhất 1 video.")
+        else:
+            VIDEO_CONFIGS = []
+            if real_file:
+                VIDEO_CONFIGS.append(("Người Thật", real_file,
+                                      "#27ae60", "rgba(39,174,96,0.12)"))
+            if fake_file:
+                VIDEO_CONFIGS.append(("Deepfake", fake_file,
+                                      "#e74c3c", "rgba(231,76,60,0.12)"))
+
+            results = {}
+            for label, vfile, color, fill in VIDEO_CONFIGS:
+                with st.spinner(f"Đang phân tích **{label}** — trích xuất tín hiệu rPPG..."):
+                    tmp_path = save_uploaded_video(vfile)
+                    raw, fps, n_det, n_tot = extract_rppg_signal(tmp_path, max_frames)
+                    try:
+                        os.unlink(tmp_path)
+                    except Exception:
+                        pass
+                    filtered          = bandpass_filter_signal(raw, fps)
+                    # Quality tính trên tín hiệu thô (detrended) — không phải filtered
+                    hr, quality, freqs, psd = compute_vitals(raw, fps)
+                    time_ax           = np.arange(len(raw)) / fps
+                    results[label]    = dict(
+                        raw=raw, filtered=filtered, fps=fps,
+                        time=time_ax, freqs=freqs, psd=psd,
+                        hr=hr, quality=quality,
+                        n_det=n_det, n_tot=n_tot,
+                        color=color, fill=fill,
+                    )
+
+            st.success("✅ Phân tích hoàn tất!")
+
+            # ── Metric cards ─────────────────────────────
+            st.subheader("📊 Kết Quả Tổng Quan")
+            metric_cols = st.columns(len(results))
+            for i, (label, r) in enumerate(results.items()):
+                is_alive = r["quality"] * 100 >= quality_threshold
+                verdict  = "✅ CÓ SỰ SỐNG" if is_alive else "❌ KHÔNG CÓ SỰ SỐNG"
+                bg       = "#eafaf1" if is_alive else "#fdedec"
+                border   = "#27ae60" if is_alive else "#e74c3c"
+                hr_display = "N/A" if r["hr"] < 30 else f"{r['hr']:.0f} BPM"
+                metric_cols[i].markdown(
+                    f"<div style='background:{bg};border:2px solid {border};"
+                    f"border-radius:10px;padding:16px;text-align:center'>"
+                    f"<div style='font-size:18px;font-weight:bold'>{label}</div>"
+                    f"<div style='font-size:28px;font-weight:bold;color:{border}'>{verdict}</div>"
+                    f"<hr style='margin:8px 0'>"
+                    f"<div>💓 Nhịp tim ước tính: <b>{hr_display}</b></div>"
+                    f"<div>📶 Chỉ số sự sống: <b>{r['quality']*100:.1f}%</b></div>"
+                    f"<div>🎯 Phát hiện mặt: <b>{r['n_det']}/{r['n_tot']} frame</b></div>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+
+            st.divider()
+
+            # ── Chart 1: Raw GREEN signal ─────────────────
+            st.subheader("📈 Tín Hiệu Kênh GREEN Thô")
+            st.caption(
+                "Giá trị trung bình kênh GREEN vùng trán mỗi frame. "
+                "Người thật: dao động nhẹ đều đặn. Deepfake: phẳng hoặc nhảy bất thường."
+            )
+            fig1 = go.Figure()
+            for label, r in results.items():
+                fig1.add_trace(go.Scatter(
+                    x=r["time"], y=r["raw"],
+                    name=label,
+                    line=dict(color=r["color"], width=1.5),
+                    mode="lines",
+                    hovertemplate="t=%{x:.2f}s  GREEN=%{y:.2f}<extra>" + label + "</extra>",
+                ))
+            fig1.update_layout(
+                xaxis_title="Thời gian (giây)",
+                yaxis_title="Giá trị kênh GREEN (0–255)",
+                height=320,
+                hovermode="x unified",
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                margin=dict(l=50, r=20, t=10, b=50),
+            )
+            st.plotly_chart(fig1, use_container_width=True)
+
+            # ── Chart 2: Filtered signal ──────────────────
+            st.subheader("💓 Tín Hiệu Sau Lọc Bandpass (0.75 – 4.0 Hz)")
+            st.caption(
+                "Sau khi loại bỏ nhiễu DC và tần số ngoài dải nhịp tim. "
+                "Người thật: sóng hình sin đẹp, chu kỳ ~0.8–1.2 giây. "
+                "Deepfake: đường gần phẳng, không có hình dạng sinh học."
+            )
+            fig2 = go.Figure()
+            for label, r in results.items():
+                fig2.add_trace(go.Scatter(
+                    x=r["time"], y=r["filtered"],
+                    name=label,
+                    line=dict(color=r["color"], width=2.5),
+                    fill="tozeroy",
+                    fillcolor=r["fill"],
+                    mode="lines",
+                    hovertemplate="t=%{x:.2f}s  amp=%{y:.4f}<extra>" + label + "</extra>",
+                ))
+            fig2.update_layout(
+                xaxis_title="Thời gian (giây)",
+                yaxis_title="Biên độ tín hiệu",
+                height=340,
+                hovermode="x unified",
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                margin=dict(l=50, r=20, t=10, b=50),
+            )
+            st.plotly_chart(fig2, use_container_width=True)
+
+            # ── Chart 3: FFT Power Spectrum ───────────────
+            st.subheader("🔊 Phổ Tần Số FFT — Dấu Vân Tay Sinh Học")
+            st.caption(
+                "Người thật → đỉnh nhọn rõ ràng trong vùng 45–240 BPM (vùng xanh lá).  \n"
+                "Deepfake  → phổ phẳng, không có đỉnh — bằng chứng thiếu tín hiệu sinh học."
+            )
+            fig3 = go.Figure()
+            # Highlight heart rate band
+            fig3.add_vrect(
+                x0=45, x1=240,
+                fillcolor="rgba(39,174,96,0.07)",
+                line_width=0,
+                annotation_text="Vùng nhịp tim bình thường",
+                annotation_position="top left",
+                annotation_font_size=11,
+                annotation_font_color="#27ae60",
+            )
+            for label, r in results.items():
+                # Show only 0–5 Hz range (0–300 BPM)
+                mask = (r["freqs"] > 0) & (r["freqs"] <= 5.0)
+                bpm_axis = r["freqs"][mask] * 60.0
+                fig3.add_trace(go.Scatter(
+                    x=bpm_axis,
+                    y=r["psd"][mask],
+                    name=label,
+                    line=dict(color=r["color"], width=2.5),
+                    fill="tozeroy",
+                    fillcolor=r["fill"],
+                    mode="lines",
+                    hovertemplate="BPM=%{x:.1f}  Power=%{y:.4e}<extra>" + label + "</extra>",
+                ))
+                # Mark peak in heart rate band
+                hr_mask = (bpm_axis >= 45) & (bpm_axis <= 240)
+                if np.any(hr_mask):
+                    peak_bpm   = float(bpm_axis[hr_mask][np.argmax(r["psd"][mask][hr_mask])])
+                    peak_power = float(np.max(r["psd"][mask][hr_mask]))
+                    fig3.add_trace(go.Scatter(
+                        x=[peak_bpm], y=[peak_power],
+                        mode="markers+text",
+                        marker=dict(color=r["color"], size=12, symbol="star"),
+                        text=[f"  {peak_bpm:.0f} BPM"],
+                        textposition="middle right",
+                        textfont=dict(color=r["color"], size=12),
+                        showlegend=False,
+                        hoverinfo="skip",
+                    ))
+            fig3.update_layout(
+                xaxis_title="Nhịp tim tương đương (BPM)",
+                yaxis_title="Công suất tín hiệu",
+                height=380,
+                hovermode="x unified",
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                margin=dict(l=50, r=20, t=10, b=50),
+            )
+            st.plotly_chart(fig3, use_container_width=True)
+
+            # ── Chart 4: Signal Quality Bar ───────────────
+            if len(results) == 2:
+                st.subheader("📊 So Sánh Chỉ Số Tín Hiệu Sự Sống")
+                st.caption(
+                    "Tỉ lệ % năng lượng tín hiệu nằm trong băng nhịp tim (0.75–4 Hz). "
+                    "Ngưỡng phân loại hiện tại được đánh dấu bằng đường đứt nét."
+                )
+                labels_bar  = list(results.keys())
+                quality_bar = [r["quality"] * 100 for r in results.values()]
+                colors_bar  = [r["color"] for r in results.values()]
+
+                fig4 = go.Figure(go.Bar(
+                    x=labels_bar,
+                    y=quality_bar,
+                    marker_color=colors_bar,
+                    text=[f"{q:.1f}%" for q in quality_bar],
+                    textposition="outside",
+                    textfont=dict(size=16, color="black"),
+                ))
+                fig4.add_hline(
+                    y=quality_threshold,
+                    line_dash="dash",
+                    line_color="orange",
+                    annotation_text=f"Ngưỡng phân loại: {quality_threshold}%",
+                    annotation_position="top right",
+                    annotation_font_color="orange",
+                )
+                fig4.update_layout(
+                    yaxis_title="Chỉ số sự sống (%)",
+                    height=320,
+                    margin=dict(l=50, r=20, t=10, b=50),
+                    yaxis_range=[0, max(max(quality_bar) * 1.3, quality_threshold * 1.5)],
+                )
+                st.plotly_chart(fig4, use_container_width=True)
+
+            # ── Final verdict banner ──────────────────────
+            st.divider()
+            st.subheader("🏁 Kết Luận Cuối Cùng")
+            verdict_cols = st.columns(len(results))
+            for i, (label, r) in enumerate(results.items()):
+                is_alive = r["quality"] * 100 >= quality_threshold
+                icon     = "✅" if is_alive else "❌"
+                verdict  = "CÓ TÍN HIỆU SỰ SỐNG<br>→ NGƯỜI THẬT" if is_alive else "KHÔNG CÓ TÍN HIỆU<br>→ KHẢ NĂNG DEEPFAKE"
+                bg       = "#1e8449" if is_alive else "#c0392b"
+                hr_text  = f"{r['hr']:.0f} BPM" if r["hr"] >= 30 else "Không xác định"
+                verdict_cols[i].markdown(
+                    f"<div style='background:{bg};color:white;padding:24px 16px;"
+                    f"border-radius:12px;text-align:center;font-size:16px'>"
+                    f"<div style='font-size:22px;font-weight:bold;margin-bottom:8px'>"
+                    f"{icon} {label}</div>"
+                    f"<div style='font-size:26px;font-weight:bold;line-height:1.4'>"
+                    f"{verdict}</div>"
+                    f"<hr style='border-color:rgba(255,255,255,0.3);margin:12px 0'>"
+                    f"<div>💓 Nhịp tim: <b>{hr_text}</b></div>"
+                    f"<div>📶 Chỉ số sự sống: <b>{r['quality']*100:.1f}%</b></div>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+
+            # ── Explanation ───────────────────────────────
+            st.divider()
+            with st.expander("ℹ️ Tại sao Deepfake không có tín hiệu rPPG?", expanded=False):
+                st.markdown(
+                    """
+**rPPG (Remote Photoplethysmography)** hoạt động dựa trên nguyên lý:
+khi tim đập, lượng máu dưới da thay đổi → hấp thụ ánh sáng thay đổi nhẹ
+→ màu sắc pixel vùng da dao động với tần số = nhịp tim.
+
+**Tại sao Deepfake thất bại:**
+- Deepfake được tạo ra bằng cách **ánh xạ khuôn mặt** từ video nguồn sang video đích
+- Quá trình này làm **trung bình hoặc xáo trộn** tín hiệu màu sắc vi tế theo từng pixel
+- Kết quả: tín hiệu sinh học bị **hủy hoàn toàn hoặc mất tính chu kỳ**
+- Ngay cả Deepfake chất lượng cao nhất vẫn rất khó giữ lại đúng tần số nhịp tim
+
+**Ứng dụng trong ngân hàng:**
+Lớp kiểm tra rPPG được đặt ngay tại bước **xác thực video call / eKYC**,
+trước khi cho phép giao dịch lớn — chặn kẻ gian dùng video deepfake giả mạo khách hàng.
+                    """
+                )
