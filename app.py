@@ -249,9 +249,176 @@ def compute_vitals(raw_signal: np.ndarray, fps: float):
     return hr_bpm, quality, freqs, psd
 
 
-# ─────────────────────────────────────────────
-#  Build Siamese Model
-# ─────────────────────────────────────────────
+def create_ecg_animation(time_ax: np.ndarray, filtered_sig: np.ndarray,
+                          label: str, is_real: bool, skip: int = 3):
+    """
+    Tạo animated Plotly chart kiểu màn hình monitor bệnh viện.
+    Tín hiệu được vẽ dần từ trái sang phải theo từng frame.
+    """
+    import plotly.graph_objects as go
+
+    # Màu sắc theo loại video
+    if is_real:
+        line_color  = "#00ff88"   # Neon green — người thật
+        bg_color    = "#000d00"   # Đen xanh rất đậm
+        grid_color  = "#002200"
+        glow_color  = "rgba(0,255,136,0.08)"
+    else:
+        line_color  = "#ff4444"   # Đỏ — deepfake
+        bg_color    = "#0d0000"
+        grid_color  = "#220000"
+        glow_color  = "rgba(255,68,68,0.08)"
+
+    t_sub = time_ax[::skip]
+    s_sub = filtered_sig[::skip]
+    n_sub = len(t_sub)
+
+    y_min = float(s_sub.min()) * 1.6
+    y_max = float(s_sub.max()) * 1.6
+    if abs(y_max - y_min) < 1e-6:          # tín hiệu phẳng (deepfake)
+        y_min, y_max = -1.0, 1.0
+
+    # ── Tạo frames ──────────────────────────────────
+    frames = []
+    for i in range(1, n_sub + 1):
+        frames.append(go.Frame(
+            data=[
+                # Vùng fill (glow effect dưới đường)
+                go.Scatter(
+                    x=t_sub[:i], y=s_sub[:i],
+                    fill="tozeroy", fillcolor=glow_color,
+                    line=dict(color="rgba(0,0,0,0)"), showlegend=False,
+                ),
+                # Đường tín hiệu chính
+                go.Scatter(
+                    x=t_sub[:i], y=s_sub[:i],
+                    mode="lines",
+                    line=dict(color=line_color, width=2.5),
+                    name=label, showlegend=False,
+                ),
+                # Điểm sáng ở đầu đường (moving cursor)
+                go.Scatter(
+                    x=[t_sub[i - 1]], y=[s_sub[i - 1]],
+                    mode="markers",
+                    marker=dict(color="white", size=7, opacity=0.9),
+                    showlegend=False,
+                ),
+            ],
+            name=str(i),
+        ))
+
+    # ── Layout kiểu hospital monitor ────────────────
+    verdict_text = "● LIVE SIGNAL DETECTED" if is_real else "● NO BIOLOGICAL SIGNAL"
+    layout = go.Layout(
+        title=dict(
+            text=f"<b>{label}</b>  <span style='font-size:13px;color:{line_color}'>"
+                 f"{verdict_text}</span>",
+            font=dict(color=line_color, size=15, family="monospace"),
+            x=0.02,
+        ),
+        paper_bgcolor=bg_color,
+        plot_bgcolor=bg_color,
+        font=dict(color=line_color, family="monospace"),
+        xaxis=dict(
+            range=[float(t_sub[0]), float(t_sub[-1])],
+            color=line_color,
+            gridcolor=grid_color,
+            showgrid=True,
+            zeroline=False,
+            title=dict(text="Thời gian (giây)", font=dict(size=11)),
+            tickfont=dict(size=10),
+        ),
+        yaxis=dict(
+            range=[y_min, y_max],
+            color=line_color,
+            gridcolor=grid_color,
+            showgrid=True,
+            zeroline=True,
+            zerolinecolor=grid_color,
+            zerolinewidth=1,
+            title=dict(text="Biên độ", font=dict(size=11)),
+            tickfont=dict(size=10),
+        ),
+        height=280,
+        margin=dict(l=55, r=20, t=50, b=45),
+        updatemenus=[dict(
+            type="buttons",
+            showactive=False,
+            bgcolor="#111111",
+            bordercolor=line_color,
+            font=dict(color=line_color, size=12),
+            x=0.5, xanchor="center",
+            y=1.22, yanchor="top",
+            buttons=[
+                dict(
+                    label="▶ Play",
+                    method="animate",
+                    args=[None, {
+                        "frame": {"duration": 60, "redraw": True},
+                        "fromcurrent": True,
+                        "transition": {"duration": 0, "easing": "linear"},
+                    }],
+                ),
+                dict(
+                    label="⏸ Pause",
+                    method="animate",
+                    args=[[None], {
+                        "frame": {"duration": 0, "redraw": False},
+                        "mode": "immediate",
+                        "transition": {"duration": 0},
+                    }],
+                ),
+                dict(
+                    label="↺ Reset",
+                    method="animate",
+                    args=[["1"], {
+                        "frame": {"duration": 0, "redraw": True},
+                        "mode": "immediate",
+                        "transition": {"duration": 0},
+                    }],
+                ),
+            ],
+        )],
+        sliders=[dict(
+            active=0,
+            currentvalue=dict(visible=False),
+            pad=dict(b=5, t=5),
+            bgcolor="#111111",
+            bordercolor=line_color,
+            tickcolor=line_color,
+            font=dict(color=line_color, size=9),
+            steps=[
+                dict(
+                    args=[[str(i)], {
+                        "frame": {"duration": 60, "redraw": True},
+                        "mode": "immediate",
+                        "transition": {"duration": 0},
+                    }],
+                    method="animate",
+                    label="",
+                )
+                for i in range(1, n_sub + 1, max(1, n_sub // 50))
+            ],
+        )],
+    )
+
+    # Initial state: chỉ hiển thị 1 điểm đầu
+    fig = go.Figure(
+        data=[
+            go.Scatter(x=t_sub[:1], y=s_sub[:1],
+                       fill="tozeroy", fillcolor=glow_color,
+                       line=dict(color="rgba(0,0,0,0)"), showlegend=False),
+            go.Scatter(x=t_sub[:1], y=s_sub[:1],
+                       mode="lines", line=dict(color=line_color, width=2.5),
+                       showlegend=False),
+            go.Scatter(x=[t_sub[0]], y=[s_sub[0]],
+                       mode="markers", marker=dict(color="white", size=7),
+                       showlegend=False),
+        ],
+        frames=frames,
+        layout=layout,
+    )
+    return fig
 @st.cache_resource
 def build_siamese_model():
     import tensorflow as tf
@@ -995,6 +1162,23 @@ Pipeline rPPG:
                     yaxis_range=[0, max(max(quality_bar) * 1.3, quality_threshold * 1.5)],
                 )
                 st.plotly_chart(fig4, use_container_width=True)
+
+            # ── Animated ECG monitor ──────────────────────
+            st.divider()
+            st.subheader("🏥 Hospital Monitor — Sóng Tim Trực Quan")
+            st.caption(
+                "Nhấn **▶ Play** để xem tín hiệu rPPG vẽ dần theo thời gian thực.  \n"
+                "🟢 Người thật: sóng dao động đều đặn theo nhịp tim.  "
+                "🔴 Deepfake: đường gần phẳng, không có nhịp sinh học."
+            )
+            ecg_cols = st.columns(len(results))
+            for i, (label, r) in enumerate(results.items()):
+                is_real_signal = r["quality"] * 100 >= quality_threshold
+                skip = max(2, len(r["filtered"]) // 120)   # ~120 frames tối đa
+                fig_ecg = create_ecg_animation(
+                    r["time"], r["filtered"], label, is_real_signal, skip=skip
+                )
+                ecg_cols[i].plotly_chart(fig_ecg, use_container_width=True)
 
             # ── Final verdict banner ──────────────────────
             st.divider()
