@@ -227,25 +227,40 @@ def bandpass_filter_signal(signal: np.ndarray, fps: float,
 
 def compute_vitals(raw_signal: np.ndarray, fps: float):
     """
-    Quality = tỉ lệ năng lượng PHỔ TẦN SỐ của tín hiệu thô nằm trong băng nhịp tim.
-    Tính trên tín hiệu DETRENDED (chưa lọc) để phân biệt thật/deepfake rõ ràng:
-      - Người thật: hầu hết năng lượng tập trung tại 1 tần số nhịp tim → quality cao
-      - Deepfake:   năng lượng phân tán đều (nhiễu trắng) → quality thấp (~bandwidth ratio)
+    Quality = Peak Prominence — độ nổi bật của đỉnh nhịp tim trong phổ tần số.
+      - Người thật: 1 đỉnh sắc nhọn tại tần số nhịp tim → peak >> mean → quality cao
+      - Deepfake:   phổ phẳng như nhiễu → peak ≈ mean → quality thấp
+    Dùng Welch PSD (mượt hơn periodogram) và dải HR thực tế 0.75–3.0 Hz (45–180 BPM).
     """
-    from scipy.signal import periodogram, detrend
+    from scipy.signal import welch, detrend
+    import math
     if len(raw_signal) < 15:
         return 0.0, 0.0, np.array([0.0]), np.array([0.0])
-    sig      = detrend(raw_signal.astype(np.float64))
-    freqs, psd = periodogram(sig, fps)
-    hr_band  = (freqs >= 0.75) & (freqs <= 4.0)
-    all_band = freqs > 0
+
+    sig = detrend(raw_signal.astype(np.float64))
+
+    # Welch cho PSD mượt hơn, ít bị nhiễu lẻ làm lệch kết quả
+    nperseg = min(len(sig), 256)
+    freqs, psd = welch(sig, fps, nperseg=nperseg)
+
+    # Dải HR thực tế: 45–180 BPM = 0.75–3.0 Hz (bỏ 3.0–4.0 Hz vì không thực tế)
+    hr_band = (freqs >= 0.75) & (freqs <= 3.0)
     if not np.any(hr_band):
         return 0.0, 0.0, freqs, psd
-    hr_power    = float(np.sum(psd[hr_band]))
-    total_power = float(np.sum(psd[all_band])) + 1e-12
-    quality     = hr_power / total_power
-    peak_freq   = float(freqs[hr_band][np.argmax(psd[hr_band])])
-    hr_bpm      = peak_freq * 60.0
+
+    psd_hr     = psd[hr_band]
+    peak_power = float(np.max(psd_hr))
+    mean_power = float(np.mean(psd_hr)) + 1e-12
+
+    # Prominence ratio: người thật ratio cao (5x–15x), deepfake/nhiễu ratio ~1–2x
+    prominence = peak_power / mean_power
+
+    # Normalize về [0, 1] bằng log scale (nhạy ở vùng thấp, không bị bão hoà sớm)
+    # ratio=1 → 0% | ratio=3 → ~44% | ratio=6 → ~73% | ratio=12 → 100%
+    quality = float(np.clip(math.log(max(prominence, 1.0)) / math.log(12), 0.0, 1.0))
+
+    peak_freq = float(freqs[hr_band][np.argmax(psd_hr)])
+    hr_bpm    = peak_freq * 60.0
     return hr_bpm, quality, freqs, psd
 
 
