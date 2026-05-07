@@ -976,7 +976,27 @@ Pipeline rPPG:
             for label, vfile, color, fill in VIDEO_CONFIGS:
                 with st.spinner(f"Đang phân tích **{label}** — trích xuất tín hiệu rPPG..."):
                     tmp_path = save_uploaded_video(vfile)
-                    raw, fps, n_det, n_tot = extract_rppg_signal(tmp_path, max_frames)
+                    try:
+                        raw, fps, n_det, n_tot = extract_rppg_signal(tmp_path, max_frames)
+                    except ModuleNotFoundError as e:
+                        st.error(
+                            f"❌ **Thiếu thư viện:** `{e.name}`\n\n"
+                            "Vui lòng cài đặt bằng lệnh:\n"
+                            "```\npip install opencv-python-headless scipy plotly\n```\n"
+                            "Sau đó khởi động lại ứng dụng."
+                        )
+                        try:
+                            os.unlink(tmp_path)
+                        except Exception:
+                            pass
+                        break
+                    except Exception as e:
+                        st.error(f"❌ Lỗi khi xử lý video **{label}**: {e}")
+                        try:
+                            os.unlink(tmp_path)
+                        except Exception:
+                            pass
+                        break
                     try:
                         os.unlink(tmp_path)
                     except Exception:
