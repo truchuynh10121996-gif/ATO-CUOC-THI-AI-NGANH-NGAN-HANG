@@ -1269,10 +1269,10 @@ trước khi cho phép giao dịch lớn — chặn kẻ gian dùng video deepfa
 # ══════════════════════════════════════════════════════════════════════════════
 
 # ---- Cấu hình Tab 4 (chỉnh ở đây để swap model) -----------------------------
-TAB4_MODEL_NAME      = "prithivMLmods/Deep-Fake-Detector-Model"   # SigLIP-based, ~365MB
+TAB4_MODEL_NAME      = "dima806/deepfake_vs_real_image_detection"   # ViT-base, ~340MB, cân bằng cho phone video
 TAB4_BATCH_SIZE      = 4
 TAB4_FACE_MIN_SIZE   = 80
-TAB4_FACE_MARGIN     = 0.20    # mở rộng ROI 20% quanh mặt
+TAB4_FACE_MARGIN     = 0.05    # crop sát mặt — gần với training distribution của model
 TAB4_MAX_FRAMES      = 60
 
 
@@ -1397,12 +1397,13 @@ with tab4:
     with st.expander("ℹ️ Thông tin model & yêu cầu hệ thống", expanded=False):
         st.markdown(f"""
 - **Model**: `{TAB4_MODEL_NAME}` (HuggingFace)
-- **Backbone**: Vision Transformer (SigLIP) — fine-tune cho bài toán deepfake detection
-- **Kích thước weights**: ~365MB (tải tự động lần đầu, sau đó cache)
+- **Backbone**: Vision Transformer (ViT-base) — fine-tune cho bài toán deepfake detection
+- **Kích thước weights**: ~340MB (tải tự động lần đầu, sau đó cache)
 - **RAM tối thiểu**: 6GB | **Khuyến nghị**: 8GB+
 - **GPU**: tự động dùng nếu có CUDA, không bắt buộc
-- **Tốc độ inference (CPU)**: ~0.3–1.5 giây/frame
+- **Tốc độ inference (CPU)**: ~0.3–1.0 giây/frame
 - **Định dạng video hỗ trợ**: MP4, AVI, MOV, MKV
+- **Face crop margin**: {int(TAB4_FACE_MARGIN*100)}% — crop sát để khớp training distribution
         """)
 
     st.divider()
