@@ -520,10 +520,11 @@ st.markdown(
     "> Ứng dụng sinh trắc học hành vi (behavioral biometrics) trên thiết bị di động."
 )
 
-tab1, tab2, tab3 = st.tabs([
+tab1, tab2, tab3, tab4 = st.tabs([
     "📊 Tab 1 — Tạo Data Giả Lập",
     "🧠 Tab 2 — Siamese Network + MLP",
     "🫀 Tab 3 — Demo rPPG Deepfake",
+    "🤖 Tab 4 — AI Deepfake Detection",
 ])
 
 # ══════════════════════════════════════════════
@@ -1259,3 +1260,425 @@ Lớp kiểm tra rPPG được đặt ngay tại bước **xác thực video cal
 trước khi cho phép giao dịch lớn — chặn kẻ gian dùng video deepfake giả mạo khách hàng.
                     """
                 )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  TAB 4 — AI DEEPFAKE DETECTION (Pretrained Deep Learning)
+#  ❗ Module này hoàn toàn ĐỘC LẬP với Tab 3.
+#     Có thể xoá Tab 3 mà không ảnh hưởng tới Tab 4.
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ---- Cấu hình Tab 4 (chỉnh ở đây để swap model) -----------------------------
+TAB4_MODEL_NAME      = "prithivMLmods/Deep-Fake-Detector-Model"   # SigLIP-based, ~365MB
+TAB4_BATCH_SIZE      = 4
+TAB4_FACE_MIN_SIZE   = 80
+TAB4_FACE_MARGIN     = 0.20    # mở rộng ROI 20% quanh mặt
+TAB4_MAX_FRAMES      = 60
+
+
+@st.cache_resource(show_spinner="🔄 Đang tải AI model deepfake detection (lần đầu sẽ tải ~365MB)...")
+def tab4_load_model():
+    """Load pretrained model & processor 1 lần duy nhất, cache lại."""
+    from transformers import AutoImageProcessor, AutoModelForImageClassification
+    import torch
+
+    processor = AutoImageProcessor.from_pretrained(TAB4_MODEL_NAME)
+    model     = AutoModelForImageClassification.from_pretrained(TAB4_MODEL_NAME)
+    model.eval()
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model  = model.to(device)
+
+    # Tự động dò index của nhãn "fake" trong id2label
+    id2label = model.config.id2label
+    fake_idx = None
+    for idx, label in id2label.items():
+        if any(k in str(label).lower() for k in ("fake", "deepfake", "synthetic", "ai")):
+            fake_idx = int(idx)
+            break
+    if fake_idx is None:
+        fake_idx = 1   # fallback an toàn
+
+    return processor, model, device, fake_idx, id2label
+
+
+def tab4_save_video(uploaded_file) -> str:
+    suffix = "." + uploaded_file.name.rsplit(".", 1)[-1]
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    tmp.write(uploaded_file.read())
+    tmp.close()
+    return tmp.name
+
+
+def tab4_extract_face_frames(video_path: str, n_frames: int = 24):
+    """
+    Trích xuất n_frames đều nhau theo thời gian, phát hiện và crop khuôn mặt.
+
+    Returns:
+        faces       : list[PIL.Image]  — danh sách mặt đã crop
+        timestamps  : list[float]       — mốc thời gian (giây) của từng frame
+        fps         : float
+        total_frames: int
+        n_attempted : int               — số frame đã thử đọc
+    """
+    import cv2
+    from PIL import Image
+
+    face_cascade = cv2.CascadeClassifier(
+        cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+    )
+    cap = cv2.VideoCapture(video_path)
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    if total <= 0:
+        cap.release()
+        return [], [], fps, 0, 0
+
+    sample_indices = np.linspace(0, max(total - 1, 0), n_frames).astype(int)
+    faces, timestamps = [], []
+    n_attempted = 0
+
+    for idx in sample_indices:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, int(idx))
+        ret, frame = cap.read()
+        n_attempted += 1
+        if not ret:
+            continue
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        detected = face_cascade.detectMultiScale(
+            gray, scaleFactor=1.1, minNeighbors=5,
+            minSize=(TAB4_FACE_MIN_SIZE, TAB4_FACE_MIN_SIZE),
+        )
+        if len(detected) == 0:
+            continue
+        x, y, w, h = max(detected, key=lambda f: f[2] * f[3])
+        m = int(TAB4_FACE_MARGIN * max(w, h))
+        x1 = max(0, x - m); y1 = max(0, y - m)
+        x2 = min(frame.shape[1], x + w + m); y2 = min(frame.shape[0], y + h + m)
+        face_rgb = cv2.cvtColor(frame[y1:y2, x1:x2], cv2.COLOR_BGR2RGB)
+        faces.append(Image.fromarray(face_rgb))
+        timestamps.append(float(idx) / fps)
+
+    cap.release()
+    return faces, timestamps, fps, total, n_attempted
+
+
+def tab4_predict_faces(faces, processor, model, device, fake_idx, batch_size=TAB4_BATCH_SIZE):
+    """Inference batch các PIL faces, trả về list xác suất fake (0..1)."""
+    import torch
+    if not faces:
+        return []
+    out = []
+    for i in range(0, len(faces), batch_size):
+        batch = faces[i:i + batch_size]
+        inputs = processor(images=batch, return_tensors="pt").to(device)
+        with torch.no_grad():
+            logits = model(**inputs).logits
+            probs  = torch.softmax(logits, dim=-1).cpu().numpy()
+        out.extend(probs[:, fake_idx].tolist())
+    return out
+
+
+# ══════════════════════════════════════════════
+#  TAB 4 — UI
+# ══════════════════════════════════════════════
+with tab4:
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+
+    st.header("🤖 AI Deepfake Detection — Pretrained Deep Learning")
+    st.markdown(
+        "Sử dụng **mô hình deep learning đã được huấn luyện sẵn** (pretrained) trên "
+        "dataset deepfake quy mô lớn để phân loại real/fake **trên từng frame video**, "
+        "sau đó tổng hợp thành verdict cuối cùng.\n\n"
+        "**Pipeline:** Upload video → Trích xuất N frame đều theo thời gian → "
+        "Phát hiện & crop khuôn mặt → AI inference → Tổng hợp xác suất → Verdict + biểu đồ"
+    )
+
+    with st.expander("ℹ️ Thông tin model & yêu cầu hệ thống", expanded=False):
+        st.markdown(f"""
+- **Model**: `{TAB4_MODEL_NAME}` (HuggingFace)
+- **Backbone**: Vision Transformer (SigLIP) — fine-tune cho bài toán deepfake detection
+- **Kích thước weights**: ~365MB (tải tự động lần đầu, sau đó cache)
+- **RAM tối thiểu**: 6GB | **Khuyến nghị**: 8GB+
+- **GPU**: tự động dùng nếu có CUDA, không bắt buộc
+- **Tốc độ inference (CPU)**: ~0.3–1.5 giây/frame
+- **Định dạng video hỗ trợ**: MP4, AVI, MOV, MKV
+        """)
+
+    st.divider()
+
+    # ── Upload 2 video song song ─────────────────────────
+    col_l, col_r = st.columns(2)
+    with col_l:
+        st.markdown(
+            "<div style='background:#eafaf1;border-left:4px solid #27ae60;"
+            "padding:10px;border-radius:4px'><b>🟢 Video Người Thật</b></div>",
+            unsafe_allow_html=True,
+        )
+        t4_real_file = st.file_uploader(
+            "Chọn video thật", type=["mp4", "avi", "mov", "mkv"], key="t4_real"
+        )
+    with col_r:
+        st.markdown(
+            "<div style='background:#fdedec;border-left:4px solid #e74c3c;"
+            "padding:10px;border-radius:4px'><b>🔴 Video Deepfake</b></div>",
+            unsafe_allow_html=True,
+        )
+        t4_fake_file = st.file_uploader(
+            "Chọn video deepfake", type=["mp4", "avi", "mov", "mkv"], key="t4_fake"
+        )
+
+    # ── Cấu hình ─────────────────────────────────────────
+    st.divider()
+    cfg1, cfg2 = st.columns(2)
+    with cfg1:
+        t4_n_frames = st.slider(
+            "Số frame trích xuất / video", 10, TAB4_MAX_FRAMES, 24, step=2,
+            help="Nhiều frame ⇒ dự đoán ổn định hơn nhưng inference lâu hơn",
+        )
+    with cfg2:
+        t4_threshold = st.slider(
+            "Ngưỡng phân loại fake (%)", 30, 90, 50, step=5,
+            help="Frame có P(fake) ≥ ngưỡng → coi là frame deepfake. "
+                 "Verdict toàn video dựa vào % frame fake và mean P(fake).",
+        )
+
+    # ── Run analysis ─────────────────────────────────────
+    if st.button("🚀 Phân Tích Bằng AI", type="primary", key="t4_run"):
+        if t4_real_file is None and t4_fake_file is None:
+            st.warning("⚠️ Vui lòng upload ít nhất 1 video.")
+        else:
+            # Load model
+            try:
+                processor, model, device, fake_idx, id2label = tab4_load_model()
+            except ModuleNotFoundError as e:
+                st.error(
+                    f"❌ **Thiếu thư viện:** `{e.name}`\n\n"
+                    "Cài đặt bằng:\n"
+                    "```\npip install torch transformers Pillow timm\n```"
+                )
+                st.stop()
+            except Exception as e:
+                st.error(f"❌ Lỗi khi tải model: {e}")
+                st.stop()
+
+            st.success(f"✅ Đã tải model trên `{device.upper()}` "
+                       f"| Labels: `{id2label}` | Fake-idx: `{fake_idx}`")
+
+            # Build danh sách video cần xử lý
+            VIDEOS = []
+            if t4_real_file:
+                VIDEOS.append(("Người Thật",  t4_real_file, "#27ae60", "rgba(39,174,96,0.15)"))
+            if t4_fake_file:
+                VIDEOS.append(("Deepfake",    t4_fake_file, "#e74c3c", "rgba(231,76,60,0.15)"))
+
+            results = {}
+            for label, vfile, color, fill in VIDEOS:
+                with st.spinner(f"⏳ Đang xử lý **{label}** — trích xuất frame & inference AI..."):
+                    tmp_path = tab4_save_video(vfile)
+                    try:
+                        faces, ts, fps, total, n_try = tab4_extract_face_frames(tmp_path, t4_n_frames)
+                    except Exception as e:
+                        st.error(f"❌ Lỗi trích xuất frame ({label}): {e}")
+                        try: os.unlink(tmp_path)
+                        except: pass
+                        continue
+                    try: os.unlink(tmp_path)
+                    except: pass
+
+                    if not faces:
+                        st.warning(
+                            f"⚠️ Không phát hiện được khuôn mặt nào trong video **{label}**. "
+                            "Kiểm tra lại: ánh sáng, góc mặt, độ phân giải."
+                        )
+                        continue
+
+                    fake_probs = tab4_predict_faces(
+                        faces, processor, model, device, fake_idx
+                    )
+                    fake_arr = np.array(fake_probs)
+
+                    results[label] = dict(
+                        faces=faces, timestamps=ts, fake_probs=fake_arr,
+                        fps=fps, total=total, n_try=n_try, n_face=len(faces),
+                        color=color, fill=fill,
+                    )
+
+            if not results:
+                st.error("❌ Không có kết quả để hiển thị.")
+                st.stop()
+
+            st.success(f"✅ Phân tích hoàn tất {len(results)} video!")
+
+            # ── Verdict cards ────────────────────────────
+            st.subheader("📊 Kết Quả Tổng Quan")
+            v_cols = st.columns(len(results))
+            for i, (label, r) in enumerate(results.items()):
+                mean_p   = float(np.mean(r["fake_probs"]))
+                max_p    = float(np.max(r["fake_probs"]))
+                pct_fake = float(np.mean(r["fake_probs"] >= t4_threshold/100.0)) * 100.0
+                is_fake  = mean_p * 100.0 >= t4_threshold
+                verdict  = "🔴 DEEPFAKE" if is_fake else "🟢 NGƯỜI THẬT"
+                bg       = "#fdedec" if is_fake else "#eafaf1"
+                bd       = "#e74c3c" if is_fake else "#27ae60"
+                v_cols[i].markdown(
+                    f"<div style='background:{bg};border:2px solid {bd};border-radius:10px;"
+                    f"padding:18px;text-align:center'>"
+                    f"<div style='font-size:18px;font-weight:bold'>{label}</div>"
+                    f"<div style='font-size:30px;font-weight:bold;color:{bd};margin:6px 0'>{verdict}</div>"
+                    f"<hr style='margin:8px 0'>"
+                    f"<div>📈 Mean P(fake): <b>{mean_p*100:.1f}%</b></div>"
+                    f"<div>🔝 Max  P(fake): <b>{max_p*100:.1f}%</b></div>"
+                    f"<div>🎯 % frame fake: <b>{pct_fake:.0f}%</b></div>"
+                    f"<div>👤 Mặt phát hiện: <b>{r['n_face']}/{r['n_try']}</b></div>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+
+            st.divider()
+
+            # ── Chart 1: Frame-by-frame timeline ─────────
+            st.subheader("📈 Xác Suất Deepfake Theo Thời Gian (Frame-by-Frame)")
+            st.caption(
+                "Mỗi điểm = 1 frame được phân tích. Đường ngang đỏ = ngưỡng phân loại. "
+                "Người thật: hầu hết điểm dưới ngưỡng. Deepfake: phần lớn điểm trên ngưỡng."
+            )
+            fig_tl = go.Figure()
+            for label, r in results.items():
+                fig_tl.add_trace(go.Scatter(
+                    x=r["timestamps"], y=r["fake_probs"]*100,
+                    name=label, mode="lines+markers",
+                    line=dict(color=r["color"], width=2),
+                    marker=dict(size=8, color=r["color"]),
+                    fill="tozeroy", fillcolor=r["fill"],
+                    hovertemplate="t=%{x:.2f}s<br>P(fake)=%{y:.1f}%<extra>" + label + "</extra>",
+                ))
+            fig_tl.add_hline(
+                y=t4_threshold, line_dash="dash", line_color="#c0392b",
+                annotation_text=f"Ngưỡng {t4_threshold}%", annotation_position="top right",
+            )
+            fig_tl.update_layout(
+                xaxis_title="Thời gian (giây)",
+                yaxis_title="P(fake) — Xác suất là deepfake (%)",
+                yaxis_range=[0, 100],
+                height=420, hovermode="x unified",
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            )
+            st.plotly_chart(fig_tl, use_container_width=True)
+
+            # ── Chart 2: Histogram phân phối ─────────────
+            st.subheader("📊 Phân Phối Xác Suất Fake")
+            st.caption(
+                "Histogram cho thấy mật độ phân phối P(fake) trên các frame. "
+                "Người thật: dồn về phía trái. Deepfake: dồn về phía phải."
+            )
+            fig_hist = go.Figure()
+            for label, r in results.items():
+                fig_hist.add_trace(go.Histogram(
+                    x=r["fake_probs"]*100, name=label, opacity=0.7,
+                    marker_color=r["color"], nbinsx=20,
+                ))
+            fig_hist.add_vline(
+                x=t4_threshold, line_dash="dash", line_color="#c0392b",
+                annotation_text=f"Ngưỡng {t4_threshold}%",
+            )
+            fig_hist.update_layout(
+                barmode="overlay",
+                xaxis_title="P(fake) (%)", yaxis_title="Số frame",
+                xaxis_range=[0, 100], height=380,
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            )
+            st.plotly_chart(fig_hist, use_container_width=True)
+
+            # ── Chart 3: Bar chart so sánh các metric ────
+            st.subheader("📐 So Sánh Các Chỉ Số Tổng Hợp")
+            metrics_data = []
+            for label, r in results.items():
+                metrics_data.append({
+                    "video": label,
+                    "Mean P(fake) %":  float(np.mean(r["fake_probs"])) * 100,
+                    "Max P(fake) %":   float(np.max(r["fake_probs"])) * 100,
+                    "Median P(fake) %": float(np.median(r["fake_probs"])) * 100,
+                    "% frame ≥ ngưỡng": float(np.mean(r["fake_probs"] >= t4_threshold/100.0)) * 100,
+                })
+            df_metrics = pd.DataFrame(metrics_data).set_index("video")
+
+            fig_bar = go.Figure()
+            metric_names = list(df_metrics.columns)
+            for i, mname in enumerate(metric_names):
+                fig_bar.add_trace(go.Bar(
+                    x=df_metrics.index, y=df_metrics[mname],
+                    name=mname,
+                    text=[f"{v:.1f}%" for v in df_metrics[mname]],
+                    textposition="outside",
+                ))
+            fig_bar.update_layout(
+                barmode="group", height=420,
+                yaxis_title="Giá trị (%)", yaxis_range=[0, 110],
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+            # ── Sample faces ─────────────────────────────
+            st.subheader("🖼️ Mẫu Khuôn Mặt Đã Phân Tích")
+            st.caption("Hiển thị tối đa 6 mẫu mặt mỗi video kèm xác suất fake do AI dự đoán.")
+            for label, r in results.items():
+                st.markdown(f"**{label}**")
+                n_show = min(6, len(r["faces"]))
+                idxs = np.linspace(0, len(r["faces"]) - 1, n_show).astype(int)
+                cols = st.columns(n_show)
+                for ci, fi in enumerate(idxs):
+                    p = float(r["fake_probs"][fi]) * 100
+                    border = "#e74c3c" if p >= t4_threshold else "#27ae60"
+                    cols[ci].image(r["faces"][fi], use_container_width=True)
+                    cols[ci].markdown(
+                        f"<div style='text-align:center;color:{border};font-weight:bold;"
+                        f"border-top:2px solid {border};padding-top:4px'>"
+                        f"P(fake)={p:.1f}%<br><small>t={r['timestamps'][fi]:.1f}s</small></div>",
+                        unsafe_allow_html=True,
+                    )
+
+            # ── Bảng chi tiết ────────────────────────────
+            st.divider()
+            st.subheader("📋 Bảng Chi Tiết Theo Frame")
+            for label, r in results.items():
+                with st.expander(f"📄 Chi tiết — {label} ({r['n_face']} frame)", expanded=False):
+                    df_detail = pd.DataFrame({
+                        "Frame #":      np.arange(1, len(r["faces"]) + 1),
+                        "Time (s)":     [f"{t:.2f}" for t in r["timestamps"]],
+                        "P(fake) %":    [f"{p*100:.2f}" for p in r["fake_probs"]],
+                        "P(real) %":    [f"{(1-p)*100:.2f}" for p in r["fake_probs"]],
+                        "Verdict":      ["🔴 FAKE" if p*100 >= t4_threshold else "🟢 REAL"
+                                         for p in r["fake_probs"]],
+                    })
+                    st.dataframe(df_detail, use_container_width=True, hide_index=True)
+
+            # ── Diễn giải ────────────────────────────────
+            st.divider()
+            st.subheader("📖 Diễn Giải Kết Quả")
+            with st.expander("🔍 Cách AI phát hiện deepfake & ý nghĩa từng chỉ số", expanded=True):
+                st.markdown(f"""
+**Cách hoạt động:**
+1. Video được lấy mẫu **{t4_n_frames} frame** đều theo thời gian.
+2. Mỗi frame được phát hiện khuôn mặt bằng **Haar Cascade**, sau đó crop kèm margin {int(TAB4_FACE_MARGIN*100)}%.
+3. Mặt được resize/normalize về định dạng chuẩn của model (`{TAB4_MODEL_NAME}`).
+4. Model trả về 2 xác suất: P(real) và P(fake) cho mỗi mặt.
+5. Tổng hợp toàn video bằng **Mean P(fake)** so sánh với ngưỡng {t4_threshold}%.
+
+**Các chỉ số:**
+- **Mean P(fake)**: trung bình xác suất fake trên toàn bộ frame — chỉ số chính để verdict.
+- **Max P(fake)**: frame "đáng ngờ nhất" — hữu ích để phát hiện deepfake một phần.
+- **% frame ≥ ngưỡng**: tỷ lệ frame bị model gắn nhãn fake — đo độ nhất quán.
+- **Median**: ít bị ảnh hưởng bởi vài frame outlier — dùng kiểm tra chéo Mean.
+
+**Khi nào kết quả đáng tin?**
+- Tỷ lệ phát hiện mặt cao (>80% frame).
+- Khoảng cách Mean P(fake) giữa 2 video lớn (>30%).
+- Phân phối tách bạch trên histogram.
+
+**Khi nào nên nghi ngờ?**
+- Tỷ lệ phát hiện mặt thấp → ánh sáng/góc mặt kém.
+- Mean P(fake) gần ngưỡng → nằm trong vùng không chắc chắn.
+- Phân phối overlap nhiều giữa 2 video → model không phân biệt được.
+                """)
+
