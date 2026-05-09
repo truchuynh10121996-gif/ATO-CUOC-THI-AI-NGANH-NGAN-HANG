@@ -1,15 +1,22 @@
-streamlit>=1.35.0
+streamlit>=1.36.0
 numpy>=1.24.0
 pandas>=2.0.0
 scikit-learn>=1.3.0
-tensorflow>=2.13.0
 matplotlib>=3.7.0
 seaborn>=0.12.0
-opencv-python-headless>=4.8.0
-scipy>=1.11.0
 plotly>=5.18.0
-# Tab 4 — AI Deepfake Detection (Pretrained Deep Learning)
-torch>=2.0.0
-transformers>=4.40.0
-Pillow>=10.0.0
-timm>=0.9.16
+scipy>=1.11.0
+
+# Tầng 1 — LightGBM Fraud Detection
+lightgbm>=4.1.0
+shap>=0.44.0
+streamlit-shap>=1.0.2
+
+# Tầng 2 — Siamese Network
+tensorflow>=2.13.0
+
+# Tầng 3 — rPPG (đã loại bỏ Tab 3 + Tab 4 cũ)
+opencv-python-headless>=4.8.0
+
+# Khung chat Gemini
+google-generativeai>=0.7.0
