@@ -366,31 +366,96 @@ with tab_demo:
                 st.markdown("<div class='badge badge-block'>🚫 ATO — Phát hiện kẻ mạo danh!</div>",
                             unsafe_allow_html=True)
 
-        # ── Visualisation thay SHAP: feature delta + embedding compare ──
+        # ── SHAP cho Siamese (KernelExplainer trên hàm wrapper) ──────
         with cc2:
-            st.markdown("**🔍 Giải thích — Mức lệch của từng đặc trưng**")
-            ref_vec = r["ref_vec"]; new_vec = r["new_vec"]
-            # Z-score lệch giữa session mới so với reference
-            delta_pct = (new_vec - ref_vec) / (np.abs(ref_vec) + 1e-9) * 100
-            order = np.argsort(np.abs(delta_pct))[::-1]
-            order_feats = [FEATURE_COLS[i] for i in order]
-            labels_vi  = [FEATURE_VI[f] for f in order_feats]
-            colors = [PALETTE["rose_dark"] if abs(d) > 15 else
-                      PALETTE["peach_dark"] if abs(d) > 5 else PALETTE["mint_dark"]
-                      for d in delta_pct[order]]
-            fig_d = go.Figure(go.Bar(
-                x=delta_pct[order][::-1], y=labels_vi[::-1],
-                orientation="h", marker_color=colors[::-1],
-                text=[f"{v:+.1f}%" for v in delta_pct[order][::-1]],
-                textposition="outside",
-            ))
-            fig_d.add_vline(x=0, line=dict(color=PALETTE["ink"], width=1))
-            fig_d.update_layout(
-                xaxis_title="% lệch so với chữ ký gõ của user gốc",
-                title="Đỏ = lệch nhiều (đáng ngờ) · Xanh = trùng khớp",
-            )
-            plotly_pastel_layout(fig_d, height=420)
-            st.plotly_chart(fig_d, use_container_width=True)
+            st.markdown("**🔍 SHAP — Mỗi đặc trưng đóng góp bao nhiêu vào quyết định?**")
+            st.caption("Đỏ = đẩy về phía «kẻ mạo danh» · Xanh = đẩy về phía «cùng người»")
+
+            with st.spinner("Đang tính SHAP (Kernel Explainer ~5-10 giây)…"):
+                try:
+                    import shap
+                    raw_users = raw_df.groupby("user_id")[list(FEATURE_COLS)].mean()
+                    background_unscaled = raw_users.values.astype(np.float32)
+                    ref_scaled_arr = scaler.transform(r["ref_vec"].reshape(1, -1)).astype(np.float32)
+
+                    def predict_score(new_vecs_unscaled: np.ndarray) -> np.ndarray:
+                        """Cố định reference, chỉ thay đổi 'session mới' → score."""
+                        if new_vecs_unscaled.ndim == 1:
+                            new_vecs_unscaled = new_vecs_unscaled.reshape(1, -1)
+                        new_scaled = scaler.transform(new_vecs_unscaled).astype(np.float32)
+                        n = new_scaled.shape[0]
+                        ref_rep = np.tile(ref_scaled_arr, (n, 1)).astype(np.float32)
+                        out = model.predict([ref_rep, new_scaled], verbose=0).flatten()
+                        return out
+
+                    explainer_k = shap.KernelExplainer(predict_score, background_unscaled)
+                    shap_vals = explainer_k.shap_values(
+                        r["new_vec"].reshape(1, -1).astype(np.float32),
+                        nsamples=80, silent=True,
+                    )
+                    sv = np.asarray(shap_vals).flatten()
+                    base_score = float(np.asarray(explainer_k.expected_value).flatten()[0])
+
+                    # Vì SHAP value cao = score cao = "cùng người", ta đảo dấu để
+                    # "đỏ = đẩy về phía kẻ mạo danh" (trực quan với khách hàng)
+                    contrib = -sv
+                    df_contrib = pd.DataFrame({
+                        "feature": [FEATURE_VI[f] for f in FEATURE_COLS],
+                        "shap":    contrib,
+                        "value":   r["new_vec"],
+                    })
+                    df_contrib["abs"] = df_contrib["shap"].abs()
+                    df_contrib = df_contrib.sort_values("abs", ascending=True).tail(10)
+                    bar_colors = [
+                        PALETTE["rose_dark"] if v > 0 else PALETTE["mint_dark"]
+                        for v in df_contrib["shap"]
+                    ]
+                    labels = [
+                        f"{f} = {v:.3g}" for f, v in zip(df_contrib["feature"], df_contrib["value"])
+                    ]
+                    fig_w = go.Figure(go.Bar(
+                        x=df_contrib["shap"], y=labels,
+                        orientation="h", marker_color=bar_colors,
+                        text=[f"{v:+.3f}" for v in df_contrib["shap"]],
+                        textposition="outside",
+                    ))
+                    fig_w.add_vline(x=0, line=dict(color=PALETTE["ink"], width=1))
+                    fig_w.update_layout(
+                        xaxis_title="Mức đẩy về phía 'kẻ mạo danh' ←  | →  'cùng người'",
+                        title=f"Base score = {base_score:.3f} → Final score = {r['score']:.3f}",
+                    )
+                    plotly_pastel_layout(fig_w, height=420)
+                    st.plotly_chart(fig_w, use_container_width=True)
+                    st.session_state["t2_shap_top"] = [
+                        (f, float(v)) for f, v in zip(df_contrib["feature"][::-1], df_contrib["shap"][::-1])
+                    ]
+                except ImportError:
+                    st.error("❌ Thiếu `shap`. Chạy: `pip install shap`")
+                    st.session_state["t2_shap_top"] = []
+                except Exception as e:
+                    st.error(f"❌ Lỗi tính SHAP: {e}")
+                    st.session_state["t2_shap_top"] = []
+
+        # ── Bổ trợ: % lệch của từng đặc trưng (intuitive cho khách hàng) ──
+        st.markdown("##### 📐 Mức lệch tuyệt đối từng đặc trưng so với «chữ ký» của user gốc")
+        st.caption("Bổ trợ trực quan cho SHAP — kể cả người không chuyên cũng hiểu ngay.")
+        ref_vec = r["ref_vec"]; new_vec = r["new_vec"]
+        delta_pct = (new_vec - ref_vec) / (np.abs(ref_vec) + 1e-9) * 100
+        order = np.argsort(np.abs(delta_pct))[::-1]
+        labels_vi = [FEATURE_VI[FEATURE_COLS[i]] for i in order]
+        colors = [PALETTE["rose_dark"] if abs(d) > 15 else
+                  PALETTE["peach_dark"] if abs(d) > 5 else PALETTE["mint_dark"]
+                  for d in delta_pct[order]]
+        fig_d = go.Figure(go.Bar(
+            x=delta_pct[order][::-1], y=labels_vi[::-1],
+            orientation="h", marker_color=colors[::-1],
+            text=[f"{v:+.1f}%" for v in delta_pct[order][::-1]],
+            textposition="outside",
+        ))
+        fig_d.add_vline(x=0, line=dict(color=PALETTE["ink"], width=1))
+        fig_d.update_layout(xaxis_title="% lệch so với chữ ký gõ của user gốc")
+        plotly_pastel_layout(fig_d, height=380)
+        st.plotly_chart(fig_d, use_container_width=True)
 
         # ── Embedding compare (16D) ─────────────────────────
         st.markdown("##### 🎼 So sánh «chữ ký» 16 chiều của 2 session")
@@ -409,23 +474,22 @@ with tab_demo:
         plotly_pastel_layout(fig_e, height=300)
         st.plotly_chart(fig_e, use_container_width=True)
 
-        # ── Note về SHAP cho Siamese ────────────────────────
-        with st.expander("💡 Vì sao không dùng SHAP truyền thống ở đây?", expanded=False):
+        with st.expander("💡 Cách giải thích Siamese Network bằng SHAP", expanded=False):
             st.markdown("""
-**Siamese Network** có 2 đầu vào song song chia sẻ trọng số → SHAP gốc khó áp
-trực tiếp vì *contribution của 1 feature phụ thuộc cả 2 phía cặp*.
+**Vấn đề:** Siamese có 2 đầu vào song song chia sẻ trọng số → SHAP gốc trên
+*toàn bộ cặp* khó diễn giải.
 
-**Cách giải thích thay thế (tốt hơn cho khách hàng):**
-1. **% lệch của từng đặc trưng** giữa session mới và «chữ ký» trung bình của user
-   gốc → trực quan, phù hợp ngôn ngữ phổ thông (*"Ngón tay nhấn mạnh hơn 35% so
-   với bình thường"*).
-2. **So sánh embedding 16D** — hai vector càng khác → khoảng cách càng xa →
-   càng có khả năng là kẻ mạo danh.
+**Giải pháp đã triển khai:**
+1. **Cố định reference** = «chữ ký» trung bình của user gốc.
+2. **Wrap model** thành hàm 1 đầu vào: `f(new_vec) = score(ref, new_vec)`.
+3. Dùng **`shap.KernelExplainer`** với background = trung bình của 20 user.
+4. **Đảo dấu SHAP** để biểu đồ trực quan với khách hàng:
+   - Đỏ = đặc trưng đẩy quyết định về phía **«kẻ mạo danh»**
+   - Xanh = đặc trưng giữ quyết định ở phía **«cùng người»**
 
-Cả hai đều **giải thích được**, **dễ hiểu** và **không bị ảnh hưởng giả định
-độc lập** như SHAP. Nếu muốn dùng SHAP, có thể wrap model thành hàm
-`f(new_vec) = predict(ref, new_vec)` rồi gọi `KernelExplainer` — chúng tôi có
-thể bổ sung nếu giám khảo yêu cầu.
+**Bổ trợ:** thêm 2 biểu đồ trực quan hơn cho người không chuyên:
+- **% lệch** từng đặc trưng so với chữ ký gốc
+- **So sánh embedding 16D** giữa 2 session
             """)
 
         # ── Khung chat Gemini ───────────────────────────────
@@ -441,6 +505,9 @@ thể bổ sung nếu giám khảo yêu cầu.
             "Đặc trưng lệch nhiều nhất": [
                 f"{FEATURE_VI[FEATURE_COLS[i]]}: {(r['new_vec'][i]-r['ref_vec'][i])/(abs(r['ref_vec'][i])+1e-9)*100:+.1f}%"
                 for i in np.argsort(np.abs((r['new_vec']-r['ref_vec'])/(np.abs(r['ref_vec'])+1e-9)))[-5:][::-1]
+            ],
+            "Top SHAP đẩy về phía kẻ mạo danh": [
+                f"{f}: {v:+.4f}" for f, v in st.session_state.get("t2_shap_top", [])[:5]
             ],
         }
         render_chat_panel(
