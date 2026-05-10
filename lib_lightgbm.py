@@ -85,6 +85,24 @@ def train_lightgbm(X_train, y_train, X_val, y_val,
     return model, model.evals_result_
 
 
+def find_optimal_threshold(model, X_val, y_val) -> float:
+    """Tìm ngưỡng tối ưu trên tập validation theo F1-score.
+
+    Vì sao cần?  Với dữ liệu mất cân bằng (Fraud ~1-8%), proba của model
+    thường lệch về 0 → ngưỡng mặc định 0.5 sẽ KHÔNG có dự đoán dương →
+    Precision = Recall = F1 = 0 (dù AUC vẫn cao).
+    """
+    from sklearn.metrics import precision_recall_curve
+    proba = model.predict_proba(X_val)[:, 1]
+    precs, recs, thrs = precision_recall_curve(y_val, proba)
+    # f1 cho mỗi threshold; precision_recall_curve trả về thrs có len = n-1
+    f1s = 2 * precs * recs / (precs + recs + 1e-9)
+    if len(thrs) == 0:
+        return 0.5
+    best_idx = int(np.argmax(f1s[:-1])) if len(f1s) > 1 else 0
+    return float(thrs[best_idx])
+
+
 def evaluate(model, X_test, y_test, threshold: float = 0.5):
     """Tính các metric chuẩn cho phân loại nhị phân."""
     from sklearn.metrics import (

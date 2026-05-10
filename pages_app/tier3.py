@@ -215,14 +215,14 @@ with tab_demo:
             st.error("❌ Không có kết quả."); st.stop()
 
         st.session_state["t3_results"] = results
-        st.session_state["t3_thr"] = thr
-        st.session_state["t3_win"] = win
+        st.session_state["t3_thr_used"] = thr
+        st.session_state["t3_win_used"] = win
 
     # ── Hiển thị kết quả nếu có ───────────────────────────────────
     if "t3_results" in st.session_state:
         results = st.session_state["t3_results"]
-        thr = st.session_state["t3_thr"]
-        win = st.session_state["t3_win"]
+        thr = st.session_state["t3_thr_used"]
+        win = st.session_state["t3_win_used"]
 
         st.success(f"✅ Đã phân tích {len(results)} video.")
 
