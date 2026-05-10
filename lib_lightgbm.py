@@ -220,6 +220,175 @@ def recommend_action(score: float, top_factors: list[tuple[str, float]]) -> str:
     return verdict + "\n\n" + "\n".join(f"- {b}" for b in bullets)
 
 
+# ─────────────────────────────────────────────
+#  REALTIME FEATURE ENGINEERING — dùng cho Tab Demo
+# ─────────────────────────────────────────────
+VN_BANKS = [
+    "VCB — Vietcombank",  "BIDV — BIDV",            "CTG — Vietinbank",
+    "AGR — Agribank",     "TCB — Techcombank",      "MB — MBBank",
+    "ACB — ACB",          "VPB — VPBank",           "TPB — TPBank",
+    "STB — Sacombank",    "SHB — SHB",              "HDB — HDBank",
+    "OCB — OCB",          "MSB — MSB",              "EIB — Eximbank",
+    "VIB — VIB",          "SCB — SCB",              "ABB — ABBank",
+    "NAB — Nam A Bank",   "PGB — PGBank",           "PVCB — PVcomBank",
+    "BVB — BaoVietBank",  "SeABank",                "Kienlongbank",
+]
+
+
+def find_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
+    """Tìm cột đầu tiên khớp tên trong list, không phân biệt hoa thường."""
+    lower_map = {c.lower(): c for c in df.columns}
+    for c in candidates:
+        if c.lower() in lower_map:
+            return lower_map[c.lower()]
+    return None
+
+
+def parse_history_timestamps(df: pd.DataFrame) -> tuple[pd.DataFrame, str]:
+    """Tìm cột timestamp (hoặc ghép date+time) → trả về df đã sort theo thời gian
+    và tên cột timestamp (sau khi normalize tên)."""
+    ts_col = find_col(df, [
+        "timestamp", "datetime", "date_time", "transaction_time",
+        "txn_time", "time_stamp", "created_at", "trans_time",
+    ])
+    if ts_col is not None:
+        out = df.copy()
+        out["_ts"] = pd.to_datetime(out[ts_col], errors="coerce")
+        out = out.dropna(subset=["_ts"]).sort_values("_ts").reset_index(drop=True)
+        return out, "_ts"
+
+    # Fallback: ghép date + time
+    date_col = find_col(df, ["date", "transaction_date", "txn_date", "day"])
+    time_col = find_col(df, ["time", "txn_hour", "hour"])
+    if date_col is not None:
+        out = df.copy()
+        if time_col is not None:
+            combined = out[date_col].astype(str) + " " + out[time_col].astype(str)
+        else:
+            combined = out[date_col].astype(str)
+        out["_ts"] = pd.to_datetime(combined, errors="coerce")
+        out = out.dropna(subset=["_ts"]).sort_values("_ts").reset_index(drop=True)
+        return out, "_ts"
+
+    raise ValueError(
+        "Không tìm thấy cột thời gian trong CSV. Cần có ít nhất một trong: "
+        "`timestamp`, `datetime`, `date_time`, `transaction_time`, `created_at`, "
+        "hoặc cặp `date` + `time`."
+    )
+
+
+def compute_realtime_features(
+    history_df: pd.DataFrame,
+    new_ts: pd.Timestamp,
+    new_amount: float,
+    new_recipient: str,
+    new_device: str,
+    balance_before: float,
+) -> dict:
+    """Tính 15 feature cho 1 giao dịch mới dựa trên lịch sử ~80 ngày.
+
+    Args:
+        history_df       : DataFrame lịch sử giao dịch của user
+        new_ts           : timestamp của giao dịch mới (pd.Timestamp)
+        new_amount       : số tiền giao dịch mới (VND)
+        new_recipient    : ID/STK người nhận mới
+        new_device       : device_id đang dùng
+        balance_before   : số dư TRƯỚC giao dịch mới (lấy từ balance_after dòng cuối)
+    """
+    h, ts_col = parse_history_timestamps(history_df)
+    rec_col = find_col(h, ["recipient_account", "recipient_id", "recipient",
+                            "to_account", "destination_account", "dst_account"])
+    dev_col = find_col(h, ["device_id", "device", "device_used", "main_device"])
+    amt_col = find_col(h, ["amount", "transaction_amount", "txn_amount"])
+
+    if amt_col is None:
+        raise ValueError("Không tìm thấy cột `amount` trong CSV.")
+
+    # ── 1. time_gap_prev_min
+    if len(h) > 0:
+        last_ts = h[ts_col].iloc[-1]
+        time_gap_prev_min = max((new_ts - last_ts).total_seconds() / 60.0, 0.0)
+    else:
+        time_gap_prev_min = 0.0
+
+    # ── 2-4. velocity_*
+    one_hour_ago  = new_ts - pd.Timedelta(hours=1)
+    two_min_ago   = new_ts - pd.Timedelta(minutes=2)
+    one_day_ago   = new_ts - pd.Timedelta(hours=24)
+    velocity_1h   = int((h[ts_col] >= one_hour_ago).sum())
+    velocity_2ph  = int((h[ts_col] >= two_min_ago).sum())
+    velocity_24h  = int((h[ts_col] >= one_day_ago).sum())
+
+    # ── 5. cumulative_amount_1h
+    cumulative_amount_1h = float(h.loc[h[ts_col] >= one_hour_ago, amt_col].sum())
+
+    # ── 6, 7. amount, amount_log
+    amount = float(new_amount)
+    amount_log = float(np.log1p(amount))
+
+    # ── 8. amount_vs_avg_user (so với 30 ngày trước)
+    thirty_days_ago = new_ts - pd.Timedelta(days=30)
+    recent_30d = h.loc[h[ts_col] >= thirty_days_ago, amt_col]
+    avg_30d = float(recent_30d.mean()) if len(recent_30d) > 0 else float(h[amt_col].mean() or 1.0)
+    amount_vs_avg_user = amount / max(avg_30d, 1.0)
+
+    # ── 9. amount_just_below_10M
+    amount_just_below_10M = int(8_000_000 <= amount < 10_000_000)
+
+    # ── 10. balance_drain_ratio
+    balance_drain_ratio = amount / max(float(balance_before), 1.0)
+
+    # ── 11. is_new_recipient
+    if rec_col is not None and new_recipient:
+        seen_recipients = set(h[rec_col].astype(str).str.strip())
+        is_new_recipient = int(str(new_recipient).strip() not in seen_recipients)
+    else:
+        is_new_recipient = 1
+
+    # ── 12. consecutive_new_recipients
+    if rec_col is not None and new_recipient:
+        consec = 1 if is_new_recipient else 0
+        # Đếm ngược các giao dịch gần nhất có cùng người nhận và chưa từng xuất hiện trước đó
+        if is_new_recipient:
+            for i in range(len(h) - 1, -1, -1):
+                if str(h[rec_col].iloc[i]).strip() == str(new_recipient).strip():
+                    consec += 1
+                else:
+                    break
+        consecutive_new_recipients = consec
+    else:
+        consecutive_new_recipients = 0
+
+    # ── 13. is_new_device
+    if dev_col is not None and new_device:
+        seen_devices = set(h[dev_col].astype(str).str.strip())
+        is_new_device = int(str(new_device).strip() not in seen_devices)
+    else:
+        is_new_device = 0
+
+    # ── 14, 15. hour features
+    hour_of_day = int(new_ts.hour)
+    is_night_hours = int(0 <= hour_of_day <= 5)
+
+    return {
+        "time_gap_prev_min":          round(time_gap_prev_min, 6),
+        "velocity_1h":                 velocity_1h,
+        "velocity_2ph":                velocity_2ph,
+        "velocity_24h":                velocity_24h,
+        "cumulative_amount_1h":        round(cumulative_amount_1h, 2),
+        "amount":                      round(amount, 2),
+        "amount_log":                  round(amount_log, 6),
+        "amount_vs_avg_user":          round(amount_vs_avg_user, 6),
+        "amount_just_below_10M":       amount_just_below_10M,
+        "balance_drain_ratio":         round(balance_drain_ratio, 6),
+        "is_new_recipient":            is_new_recipient,
+        "consecutive_new_recipients":  consecutive_new_recipients,
+        "is_new_device":               is_new_device,
+        "hour_of_day":                 hour_of_day,
+        "is_night_hours":              is_night_hours,
+    }
+
+
 def synthetic_dataset(n: int = 5000, seed: int = 42) -> pd.DataFrame:
     """Sinh dataset giả lập (dùng khi user chưa upload CSV) cho phép demo nhanh."""
     rng = np.random.default_rng(seed)
