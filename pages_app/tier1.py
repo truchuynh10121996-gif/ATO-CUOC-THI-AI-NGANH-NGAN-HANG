@@ -585,7 +585,8 @@ with tab_demo:
             key_prefix="t1_chat",
             suggested_questions=[
                 "Vì sao giao dịch này bị đánh dấu rủi ro?",
-                "Tôi nên giải thích thế nào với khách hàng?",
+                ("Giải thích dễ hiểu cho khách hàng",
+                 "Tôi nên giải thích thế nào với khách hàng?"),
                 "Khách hàng cần làm gì tiếp theo?",
             ],
             title="💬 Phân tích của AI (Gemini) — Giải thích cho khách hàng",

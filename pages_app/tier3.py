@@ -134,13 +134,6 @@ thay đổi ánh sáng → tăng SNR 3-5× so với GREEN đơn thuần.
             """
         )
 
-    st.info(
-        "🏦 **Ứng dụng trong eKYC ngân hàng:** Lớp rPPG đặt tại bước **xác thực "
-        "video call** trước giao dịch lớn. Phải đạt cả 2 ngưỡng "
-        "*Prominence* + *Stability* mới được duyệt."
-    )
-
-
 # ════════════════════════════════════════════════════════════════════
 #  TAB 2 — DEMO
 # ════════════════════════════════════════════════════════════════════

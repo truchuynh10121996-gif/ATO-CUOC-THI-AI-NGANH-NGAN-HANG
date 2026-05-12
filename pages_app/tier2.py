@@ -164,7 +164,9 @@ thô thành **vector embedding 16 chiều** đại diện cho «chữ ký hành 
             from sklearn.model_selection import train_test_split
             from sklearn.preprocessing import StandardScaler
 
-            with st.spinner("Đang xây dựng và train mô hình..."):
+            # ── Status box "live" để giám khảo thấy rõ tiến trình ───────
+            with st.status("⏳ Đang huấn luyện Siamese Network…", expanded=True) as status_box:
+                st.write("🧮 Bước 1/4 — Chuẩn hoá đặc trưng (StandardScaler)…")
                 feat_A = [f"A_{f}" for f in FEATURE_COLS]
                 feat_B = [f"B_{f}" for f in FEATURE_COLS]
                 X_A = pair_df[feat_A].values.astype(np.float32)
@@ -176,26 +178,47 @@ thô thành **vector embedding 16 chiều** đại diện cho «chữ ký hành 
                 X_A_s = scaler.transform(X_A)
                 X_B_s = scaler.transform(X_B)
 
+                st.write(f"✂️ Bước 2/4 — Chia train / test ({100-test_split}/{test_split}%)…")
                 XA_tr, XA_te, XB_tr, XB_te, y_tr, y_te = train_test_split(
                     X_A_s, X_B_s, y, test_size=test_split/100, random_state=42, stratify=y
                 )
+                st.write(f"   • Train: {len(XA_tr):,} cặp · Test: {len(XA_te):,} cặp")
 
+                st.write("🧠 Bước 3/4 — Khởi tạo MLP backbone (64→32→16) + 2 nhánh chia sẻ trọng số…")
                 model, mlp_backbone = build_siamese_model()
                 st.session_state.update({
                     "scaler": scaler, "mlp_backbone": mlp_backbone, "model": model,
                 })
+                st.write(f"   • Tham số mô hình: **{model.count_params():,}**")
 
+                st.write(f"🏋️ Bước 4/4 — Huấn luyện {epochs} epoch (batch={batch_size})…")
+                # Progress bar + dòng metric "chạy chữ" theo từng epoch
+                pbar = st.progress(0, text=f"Epoch 0 / {epochs} — đang khởi động…")
+                metric_line = st.empty()
                 hist = {"loss": [], "val_loss": [], "accuracy": [], "val_accuracy": []}
-                pbar = st.progress(0); status = st.empty()
 
                 class SCB(tf.keras.callbacks.Callback):
+                    def on_epoch_begin(self, epoch, logs=None):
+                        pbar.progress(
+                            int(epoch / epochs * 100),
+                            text=f"⏳ Epoch {epoch+1} / {epochs} — đang học…",
+                        )
+
                     def on_epoch_end(self, epoch, logs=None):
                         logs = logs or {}
-                        for k in hist: hist[k].append(logs.get(k, 0))
-                        pbar.progress(int((epoch + 1) / epochs * 100))
-                        status.text(
-                            f"Epoch {epoch+1}/{epochs} | loss={logs.get('loss',0):.4f} | "
-                            f"val_acc={logs.get('val_accuracy',0):.4f}"
+                        for k in hist:
+                            hist[k].append(logs.get(k, 0))
+                        pct = int((epoch + 1) / epochs * 100)
+                        pbar.progress(
+                            pct,
+                            text=f"✅ Epoch {epoch+1} / {epochs} hoàn tất ({pct}%)",
+                        )
+                        metric_line.markdown(
+                            f"📊 **Epoch {epoch+1}/{epochs}** · "
+                            f"loss = `{logs.get('loss', 0):.4f}` · "
+                            f"val_loss = `{logs.get('val_loss', 0):.4f}` · "
+                            f"acc = `{logs.get('accuracy', 0)*100:.2f}%` · "
+                            f"**val_acc = `{logs.get('val_accuracy', 0)*100:.2f}%`**"
                         )
 
                 model.fit(
@@ -209,7 +232,12 @@ thô thành **vector embedding 16 chiều** đại diện cho «chữ ký hành 
                     "XA_te": XA_te, "XB_te": XB_te, "y_te": y_te, "history": hist,
                 })
 
-            st.success("✅ Huấn luyện hoàn tất!")
+                final_val_acc = hist["val_accuracy"][-1] if hist["val_accuracy"] else 0
+                status_box.update(
+                    label=f"✅ Huấn luyện hoàn tất — val_accuracy = {final_val_acc*100:.2f}%",
+                    state="complete", expanded=False,
+                )
+            st.balloons()
 
         # ── Kết quả ────────────────────────────────────────────
         if "history" in st.session_state:
