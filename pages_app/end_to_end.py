@@ -21,7 +21,7 @@ from theme import inject_pastel_css, plotly_pastel_layout, PALETTE
 from lib_lightgbm import (
     feature_label, VN_BANKS, find_col,
     parse_history_timestamps, compute_realtime_features,
-    get_shap_values, recommend_action,
+    get_shap_values, recommend_action, apply_rule_based_risk,
 )
 from lib_personas import PERSONAS, FEATURE_COLS, FEATURE_VI
 from lib_gemini import render_chat_panel
@@ -239,7 +239,12 @@ with tab_demo:
             x_row = pd.DataFrame([[feats.get(c, 0) for c in lgbm_features]],
                                  columns=lgbm_features)
             st.write("📘 Tầng 1: Chấm điểm bằng LightGBM…")
-            p_lgbm = float(lgbm_model.predict_proba(x_row)[0, 1])
+            raw_p_lgbm = float(lgbm_model.predict_proba(x_row)[0, 1])
+            # Kết hợp với luật nghiệp vụ cứng (giống Tab Tầng 1 Realtime)
+            p_lgbm, triggered_rules = apply_rule_based_risk(raw_p_lgbm, feats)
+            if triggered_rules and abs(p_lgbm - raw_p_lgbm) > 1e-6:
+                st.write(f"   • Điểm Tầng 1: {raw_p_lgbm*100:.2f}% → nâng lên "
+                         f"{p_lgbm*100:.2f}% do {len(triggered_rules)} luật rủi ro.")
 
             # ── (2) SIAMESE ───────────────────────────────────
             st.write("📗 Tầng 2: Lấy «chữ ký gõ phím» của khách hàng…")
@@ -274,7 +279,8 @@ with tab_demo:
             p_final = e_w_lgbm * p_lgbm + e_w_siam * p_ato
 
             st.session_state["e2e_results"] = dict(
-                p_lgbm=p_lgbm, sim=sim, p_ato=p_ato, p_final=p_final,
+                p_lgbm=p_lgbm, raw_p_lgbm=raw_p_lgbm, triggered_rules=triggered_rules,
+                sim=sim, p_ato=p_ato, p_final=p_final,
                 w_lgbm=e_w_lgbm, w_siam=e_w_siam,
                 x_row=x_row, feats=feats,
                 ref_vec=ref_vec, new_vec=new_vec, emb_ref=emb_ref, emb_new=emb_new,
@@ -412,7 +418,15 @@ with tab_demo:
 
         # ── Khuyến nghị hành động ──────────────────────────────
         st.markdown("### 📋 Khuyến nghị hành động (tổng hợp)")
-        st.markdown(recommend_action(p_final_live, top_lgbm))
+        rules_e2e = r.get("triggered_rules", [])
+        if rules_e2e and abs(r["p_lgbm"] - r.get("raw_p_lgbm", r["p_lgbm"])) > 1e-6:
+            st.warning(
+                f"🛡️ **Điểm Tầng 1 đã được nâng từ "
+                f"{r.get('raw_p_lgbm', r['p_lgbm'])*100:.2f}% → {r['p_lgbm']*100:.2f}%** "
+                f"do {len(rules_e2e)} luật nghiệp vụ:\n\n"
+                + "\n".join(f"- {x}" for x in rules_e2e[:5])
+            )
+        st.markdown(recommend_action(p_final_live, top_lgbm, triggered_rules=rules_e2e))
 
         # ── Chat Gemini ────────────────────────────────────────
         st.divider()

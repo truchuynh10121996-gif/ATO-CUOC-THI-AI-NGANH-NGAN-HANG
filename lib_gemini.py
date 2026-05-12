@@ -114,12 +114,17 @@ def render_chat_panel(
     if history_key not in st.session_state:
         st.session_state[history_key] = []
 
-    # Quick suggestion buttons
+    # Quick suggestion buttons.
+    # Mỗi item có thể là chuỗi (label == prompt) hoặc tuple (label_hiển_thị, prompt_gửi_Gemini).
     if suggested_questions:
         cols = st.columns(len(suggested_questions))
         for i, q in enumerate(suggested_questions):
-            if cols[i].button(q, key=f"{key_prefix}_suggest_{i}", use_container_width=True):
-                st.session_state[f"{key_prefix}_pending"] = q
+            if isinstance(q, (tuple, list)) and len(q) == 2:
+                label, prompt_text = q
+            else:
+                label = prompt_text = q
+            if cols[i].button(label, key=f"{key_prefix}_suggest_{i}", use_container_width=True):
+                st.session_state[f"{key_prefix}_pending"] = prompt_text
 
     # Show history
     for msg in st.session_state[history_key]:

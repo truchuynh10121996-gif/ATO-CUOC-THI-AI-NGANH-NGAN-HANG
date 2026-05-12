@@ -11,7 +11,7 @@ from datetime import datetime, time, timedelta
 from lib_lightgbm import (
     DEFAULT_FRAUD_FEATURES, TARGET_COL, FEATURE_VI, feature_label,
     split_features, train_lightgbm, evaluate, get_shap_values,
-    find_optimal_threshold, recommend_action,
+    find_optimal_threshold, recommend_action, apply_rule_based_risk,
     VN_BANKS, find_col, parse_history_timestamps, compute_realtime_features,
 )
 from lib_gemini import render_chat_panel
@@ -461,21 +461,35 @@ with tab_demo:
             x_row = pd.DataFrame([[feats.get(c, 0) for c in feat_cols]],
                                  columns=feat_cols)
             with st.spinner("Đang chấm điểm bằng LightGBM…"):
-                proba = float(model.predict_proba(x_row)[0, 1])
-            st.session_state["t1_realtime_proba"] = proba
-            st.session_state["t1_realtime_x_row"] = x_row
+                raw_proba = float(model.predict_proba(x_row)[0, 1])
+            # ── Kết hợp ML score với luật nghiệp vụ cứng để tránh APPROVE nhầm
+            adj_proba, triggered = apply_rule_based_risk(raw_proba, feats)
+            st.session_state["t1_realtime_proba"]     = adj_proba
+            st.session_state["t1_realtime_raw_proba"] = raw_proba
+            st.session_state["t1_realtime_rules"]     = triggered
+            st.session_state["t1_realtime_x_row"]     = x_row
 
     # ───────────────────────────────────────────────────────────────
     #  PHẦN 4 — Kết quả AI + SHAP + khuyến nghị + chat (REALTIME)
     # ───────────────────────────────────────────────────────────────
     if "t1_realtime_proba" in st.session_state:
         proba = st.session_state["t1_realtime_proba"]
+        raw_proba = st.session_state.get("t1_realtime_raw_proba", proba)
+        triggered = st.session_state.get("t1_realtime_rules", [])
         x_row = st.session_state["t1_realtime_x_row"]
         feats = st.session_state["t1_realtime_features"]
         meta  = st.session_state["t1_realtime_meta"]
 
         st.divider()
         st.markdown("##### 🤖 Kết quả AI")
+
+        # Thông báo khi điểm đã được điều chỉnh bằng luật nghiệp vụ
+        if triggered and abs(proba - raw_proba) > 1e-6:
+            st.warning(
+                f"🛡️ **Điểm đã được nâng từ {raw_proba*100:.2f}% → {proba*100:.2f}%** "
+                f"do {len(triggered)} luật nghiệp vụ được kích hoạt:\n\n"
+                + "\n".join(f"- {r}" for r in triggered[:5])
+            )
 
         gauge_color = (PALETTE["mint_dark"] if proba < 0.30 else
                        PALETTE["peach_dark"] if proba < 0.65 else
@@ -560,7 +574,7 @@ with tab_demo:
 
         # ── Khuyến nghị ──────────────────────────────────────────
         st.markdown("##### 📋 Khuyến nghị hành động")
-        st.markdown(recommend_action(proba, top_factors))
+        st.markdown(recommend_action(proba, top_factors, triggered_rules=triggered))
 
         # ── Khung chat Gemini (lấy data realtime) ────────────────
         st.divider()
@@ -572,10 +586,12 @@ with tab_demo:
             "Thời gian":               meta["timestamp"].strftime("%d/%m/%Y %H:%M"),
             "Thiết bị":                meta["device"],
             "Số dư trước GD":          f"{meta['balance_before']:,.0f} VNĐ",
-            "Điểm rủi ro AI (0–1)":    f"{proba:.4f}",
-            "Xác suất Fraud (%)":      f"{proba*100:.2f}",
+            "Điểm rủi ro AI thô (LightGBM, 0–1)": f"{raw_proba:.4f}",
+            "Điểm rủi ro sau khi áp luật (0–1)":  f"{proba:.4f}",
+            "Xác suất Fraud cuối (%)": f"{proba*100:.2f}",
             "Quyết định hệ thống":     ("APPROVED" if proba < 0.3 else
                                          "REVIEW" if proba < 0.65 else "BLOCKED"),
+            "Luật nghiệp vụ đã kích hoạt": triggered or ["(không có)"],
             "Top yếu tố ảnh hưởng":    [f"{f}: {v:+.3f}" for f, v in top_factors[:6]],
             "Đặc trưng giao dịch":     [f"{feature_label(k)}: {v}" for k, v in feats.items()],
         }
@@ -585,7 +601,8 @@ with tab_demo:
             key_prefix="t1_chat",
             suggested_questions=[
                 "Vì sao giao dịch này bị đánh dấu rủi ro?",
-                "Tôi nên giải thích thế nào với khách hàng?",
+                ("Giải thích dễ hiểu cho khách hàng",
+                 "Tôi nên giải thích thế nào với khách hàng?"),
                 "Khách hàng cần làm gì tiếp theo?",
             ],
             title="💬 Phân tích của AI (Gemini) — Giải thích cho khách hàng",

@@ -122,8 +122,8 @@ with c3:
 <h3>🫀 Tầng 3</h3>
 <b>Chống DeepFake bằng rPPG</b><br>
 <span style='color:#8C7785;font-size:13px'>POS Algorithm + Multi-ROI</span><br><br>
-Phát hiện <b>nhịp tim qua da mặt</b> từ camera điện thoại trong eKYC.
-DeepFake không có tín hiệu sự sống → chặn ngay.
+Phân tích dao động vi tế của kênh màu trên da mặt để tái lập tín hiệu nhịp tim.
+DeepFake và ảnh tĩnh thiếu dòng máu thật nên phổ tần số phẳng — bị chặn ngay tức thì.
 </div>
         """,
         unsafe_allow_html=True,
@@ -132,22 +132,3 @@ DeepFake không có tín hiệu sự sống → chặn ngay.
         st.switch_page("pages_app/tier3.py")
 
 st.write("")
-st.divider()
-
-# ── Highlights ─────────────────────────────────────────────────────
-st.markdown("### ✨ Điểm sáng giải pháp")
-h1, h2, h3, h4 = st.columns(4)
-with h1:
-    st.metric("Lớp phòng vệ", "3", help="3 model AI độc lập, tăng độ tin cậy")
-with h2:
-    st.metric("Giải thích AI", "SHAP + Gemini", help="Mọi quyết định đều giải thích được")
-with h3:
-    st.metric("Chặn DeepFake", "POS + HR", help="Phát hiện cả face-swap")
-with h4:
-    st.metric("Triển khai", "Realtime", help="Đáp ứng dưới 200ms/giao dịch")
-
-st.write("")
-st.info(
-    "🎓 **Hướng dẫn cho ban giám khảo:** Sử dụng menu bên trái để duyệt qua 3 tầng. "
-    "Mỗi tầng có 2–3 tab con: huấn luyện, demo trực tiếp, và phân tích AI bằng tiếng Việt."
-)

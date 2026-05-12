@@ -193,8 +193,66 @@ PRESETS = {
 }
 
 
-def recommend_action(score: float, top_factors: list[tuple[str, float]]) -> str:
-    """Sinh khuyến nghị hành động dựa trên score + SHAP."""
+def apply_rule_based_risk(score: float, feats: dict | None = None) -> tuple[float, list[str]]:
+    """Hybrid scoring — kết hợp xác suất từ LightGBM với các luật nghiệp vụ cứng.
+
+    Lý do:  Model học từ dữ liệu CSV có thể chưa phản ánh đủ một số dấu hiệu
+    rủi ro nghiệp vụ rõ ràng (vd. thiết bị lạ chuyển tiền lớn cho người nhận
+    mới lúc 3 giờ sáng). Ta nâng score tối thiểu khi có các trigger cứng để
+    tránh APPROVE nhầm trong demo, đồng thời ghi rõ luật nào đã kích hoạt.
+
+    Trả về: (score đã điều chỉnh, danh sách luật đã kích hoạt)
+    """
+    if feats is None:
+        return float(score), []
+
+    new_device   = int(feats.get("is_new_device", 0) or 0) == 1
+    new_recip    = int(feats.get("is_new_recipient", 0) or 0) == 1
+    night        = int(feats.get("is_night_hours", 0) or 0) == 1
+    just_below   = int(feats.get("amount_just_below_10M", 0) or 0) == 1
+    amount       = float(feats.get("amount", 0) or 0)
+    velocity_1h  = float(feats.get("velocity_1h", 0) or 0)
+    drain        = float(feats.get("balance_drain_ratio", 0) or 0)
+    consec_new   = float(feats.get("consecutive_new_recipients", 0) or 0)
+    amt_vs_avg   = float(feats.get("amount_vs_avg_user", 1) or 1)
+
+    rules: list[tuple[str, float]] = []  # (mô tả, ngưỡng tối thiểu)
+
+    if new_device and new_recip:
+        rules.append(("Thiết bị lạ + người nhận mới (kẻ chiếm tài khoản điển hình)", 0.78))
+    if new_device and amount >= 10_000_000:
+        rules.append(("Thiết bị lạ chuyển tiền lớn (≥10 triệu)", 0.72))
+    if new_device and night:
+        rules.append(("Thiết bị lạ giao dịch ban đêm (22h–5h)", 0.68))
+    if new_device:
+        rules.append(("Thiết bị chưa từng đăng nhập (is_new_device=1)", 0.40))
+    if new_recip and amount >= 20_000_000:
+        rules.append(("Người nhận mới + số tiền lớn (≥20 triệu)", 0.65))
+    if drain >= 0.8:
+        rules.append((f"Rút cạn số dư ({drain*100:.0f}% số dư)", 0.70))
+    if velocity_1h >= 5:
+        rules.append((f"Tần suất giao dịch cao bất thường ({int(velocity_1h)} lần / 1h)", 0.62))
+    if just_below:
+        rules.append(("Số tiền sát ngưỡng 10 triệu (né hạn mức)", 0.55))
+    if night and amount >= 10_000_000:
+        rules.append(("Giao dịch lớn lúc đêm khuya", 0.55))
+    if amt_vs_avg >= 8:
+        rules.append((f"Số tiền gấp ≥8× trung bình của khách ({amt_vs_avg:.1f}×)", 0.55))
+    if consec_new >= 3:
+        rules.append((f"{int(consec_new)} người nhận mới liên tiếp", 0.60))
+
+    if not rules:
+        return float(score), []
+
+    min_floor = max(r[1] for r in rules)
+    adjusted  = max(float(score), min_floor)
+    return adjusted, [r[0] for r in rules]
+
+
+def recommend_action(score: float, top_factors: list[tuple[str, float]],
+                     triggered_rules: list[str] | None = None) -> str:
+    """Sinh khuyến nghị hành động dựa trên score + SHAP + luật nghiệp vụ."""
+    triggered_rules = triggered_rules or []
     if score < 0.30:
         verdict = "✅ **APPROVED** — Cho phép giao dịch tự động."
         bullets = [
@@ -207,16 +265,22 @@ def recommend_action(score: float, top_factors: list[tuple[str, float]]) -> str:
         bullets = [
             "Yêu cầu OTP qua SMS hoặc Smart-OTP.",
             "Có thể yêu cầu xác thực sinh trắc học (FaceID/TouchID).",
-            "Lý do đáng ngờ chính: " + ", ".join([f for f, _ in top_factors[:3]]),
         ]
+        if triggered_rules:
+            bullets.append("Dấu hiệu rủi ro phát hiện: " + "; ".join(triggered_rules[:3]))
+        elif top_factors:
+            bullets.append("Lý do đáng ngờ chính: " + ", ".join([f for f, _ in top_factors[:3]]))
     else:
         verdict = "🚫 **BLOCKED** — Tạm khoá giao dịch, gọi tổng đài."
         bullets = [
             "Khoá tạm thời tài khoản và gửi thông báo cho khách hàng.",
             "Chuyển sang đội ngũ phòng chống gian lận xác minh trực tiếp.",
-            "Yêu cầu xác thực lại qua video call (eKYC + rPPG).",
-            "Yếu tố rủi ro chính: " + ", ".join([f for f, _ in top_factors[:3]]),
+            "Yêu cầu xác thực lại qua video call (chống DeepFake bằng rPPG).",
         ]
+        if triggered_rules:
+            bullets.append("Yếu tố rủi ro chính: " + "; ".join(triggered_rules[:3]))
+        elif top_factors:
+            bullets.append("Yếu tố rủi ro chính: " + ", ".join([f for f, _ in top_factors[:3]]))
     return verdict + "\n\n" + "\n".join(f"- {b}" for b in bullets)
 
 
