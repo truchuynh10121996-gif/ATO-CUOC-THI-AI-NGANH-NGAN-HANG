@@ -14,7 +14,7 @@ from lib_gemini import render_chat_panel
 inject_pastel_css()
 matplotlib_pastel()
 
-st.markdown("<div class='hero-tag'>🧠 TẦNG 2 · SIAMESE NETWORK</div>", unsafe_allow_html=True)
+st.markdown("<div class='hero-tag'>🧠 SIAMESE NETWORK · MLP</div>", unsafe_allow_html=True)
 st.title("Sinh trắc học hành vi")
 st.caption(
     "Câu hỏi cốt lõi: *User đang thao tác có giống «chính họ» trong quá khứ không?* — "

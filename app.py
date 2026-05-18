@@ -17,16 +17,16 @@ st.set_page_config(
 # ── Định nghĩa các trang ─────────────────────────────────────────────
 PAGES = {
     "Tổng quan": [
-        st.Page("pages_app/home.py",        title="Trang chủ",                     icon="🏠", default=True),
+        st.Page("pages_app/home.py",        title="Trang chủ",                              icon="🏠", default=True),
     ],
-    "3 Lớp Phòng Vệ": [
-        st.Page("pages_app/tier1.py",       title="Tầng 1 — LightGBM Fraud",        icon="💳"),
-        st.Page("pages_app/tier2.py",       title="Tầng 2 — Sinh trắc học hành vi", icon="🧠"),
-        st.Page("pages_app/tier3.py",       title="Tầng 3 — rPPG chống DeepFake",   icon="🫀"),
+    "Giải pháp chính": [
+        st.Page("pages_app/tier2.py",       title="Kiến trúc Siamese Network — model MLP",  icon="🧠"),
+        st.Page("pages_app/tier3.py",       title="Công nghệ rPPG chống DeepFake",          icon="🫀"),
     ],
     "Mở rộng": [
-        st.Page("pages_app/end_to_end.py",  title="Demo End-to-End",                icon="🔗"),
-        st.Page("pages_app/author.py",      title="Tác giả",                        icon="👤"),
+        st.Page("pages_app/end_to_end.py",  title="Demo End-to-End",                        icon="🔗"),
+        st.Page("pages_app/tier1.py",       title="AI hỗ trợ Demo Siamese Network",         icon="💳"),
+        st.Page("pages_app/author.py",      title="Tác giả",                                icon="👤"),
     ],
 }
 
