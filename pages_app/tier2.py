@@ -1,4 +1,5 @@
 """🧠 Tầng 2 — Sinh trắc học hành vi (Siamese Network + MLP)."""
+import hashlib
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -371,19 +372,52 @@ with tab_demo:
             horizontal=True, key="t2_scen",
         )
 
-    if st.button("🔍 Kiểm tra ngay", key="t2_check", type="primary"):
-        ref_sessions = raw_df[raw_df["user_id"] == ref_user_id]
-        ref_vec = ref_sessions[FEATURE_COLS].mean().values.astype(np.float32)
+    # ── Tính sẵn 2 vector đặc trưng để hiển thị preview (deterministic) ──
+    _ref_sessions = raw_df[raw_df["user_id"] == ref_user_id]
+    ref_vec = _ref_sessions[FEATURE_COLS].mean().values.astype(np.float32)
 
-        if "Cùng người" in scenario:
-            rng = np.random.default_rng(77)
-            new_vec = (ref_vec + rng.normal(0, np.abs(ref_vec) * 0.07)).astype(np.float32)
-            true_label = "Cùng người"; imposter_name = None
-        else:
-            others = [p for p in PERSONAS if p["id"] != ref_user_id]
-            imp = np.random.choice(others)
-            new_vec = raw_df[raw_df["user_id"] == imp["id"]][FEATURE_COLS].mean().values.astype(np.float32)
-            true_label = f"Kẻ mạo danh ({imp['name']})"; imposter_name = imp['name']
+    if "Cùng người" in scenario:
+        _rng = np.random.default_rng(77)
+        new_vec = (ref_vec + _rng.normal(0, np.abs(ref_vec) * 0.07)).astype(np.float32)
+        true_label = "Cùng người"
+        imposter_name = None
+        rt_caption = "Phiên giả lập của chính khách hàng (nhiễu nhẹ)"
+    else:
+        _others = [p for p in PERSONAS if p["id"] != ref_user_id]
+        _imp_idx = int(hashlib.md5(ref_user_id.encode()).hexdigest(), 16) % len(_others)
+        imp = _others[_imp_idx]
+        new_vec = raw_df[raw_df["user_id"] == imp["id"]][FEATURE_COLS].mean().values.astype(np.float32)
+        true_label = f"Kẻ mạo danh ({imp['name']})"
+        imposter_name = imp["name"]
+        rt_caption = f"Phiên của «{imp['name']}» — đóng vai kẻ mạo danh"
+
+    # ── Hiển thị 2 bộ feature song song để giám khảo so sánh trực quan ──
+    _ref_name = next(p["name"] for p in PERSONAS if p["id"] == ref_user_id)
+    pv1, pv2 = st.columns(2)
+    with pv1:
+        st.markdown(
+            f"##### 📚 Chữ ký hành vi lưu trữ trong hệ thống của khách hàng"
+        )
+        st.caption(f"Trung bình các phiên đã lưu của **{_ref_name}** ({ref_user_id}).")
+        df_ref = pd.DataFrame({
+            "Đặc trưng": [FEATURE_VI[f] for f in FEATURE_COLS],
+            "Giá trị":   [f"{v:.4f}" for v in ref_vec],
+        })
+        st.dataframe(df_ref, hide_index=True, use_container_width=True, height=460)
+    with pv2:
+        st.markdown(
+            f"##### 📡 Bộ hành vi thu thập Realtime khi có giao dịch được thực hiện"
+        )
+        st.caption(rt_caption)
+        df_rt = pd.DataFrame({
+            "Đặc trưng":   [FEATURE_VI[f] for f in FEATURE_COLS],
+            "Giá trị":     [f"{v:.4f}" for v in new_vec],
+            "Lệch so gốc": [f"{(new_vec[i]-ref_vec[i])/(abs(ref_vec[i])+1e-9)*100:+.1f}%"
+                            for i in range(len(FEATURE_COLS))],
+        })
+        st.dataframe(df_rt, hide_index=True, use_container_width=True, height=460)
+
+    if st.button("🔍 Kiểm tra ngay", key="t2_check", type="primary"):
 
         ref_s = scaler.transform(ref_vec.reshape(1, -1))
         new_s = scaler.transform(new_vec.reshape(1, -1))
