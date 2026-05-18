@@ -11,7 +11,7 @@ import os
 import time
 import streamlit as st
 
-DEFAULT_MODEL = "gemini-2.0-flash"
+DEFAULT_MODEL = "gemini-1.5-flash"
 
 
 def get_api_key() -> str | None:
@@ -22,6 +22,16 @@ def get_api_key() -> str | None:
     except Exception:
         pass
     return os.environ.get("GEMINI_API_KEY")
+
+
+def get_model_name() -> str:
+    """Lấy tên model từ st.secrets / env var, fallback về DEFAULT_MODEL."""
+    try:
+        if "GEMINI_MODEL" in st.secrets:
+            return st.secrets["GEMINI_MODEL"]
+    except Exception:
+        pass
+    return os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)
 
 
 def _build_system_prompt(role: str) -> str:
@@ -87,7 +97,7 @@ def stream_explanation(context: dict, user_question: str, role: str = "Phát hi�
             + "\n\nTRẢ LỜI:"
         )
 
-        model = genai.GenerativeModel(DEFAULT_MODEL)
+        model = genai.GenerativeModel(get_model_name())
         response = model.generate_content(prompt, stream=True)
         for chunk in response:
             if hasattr(chunk, "text") and chunk.text:
