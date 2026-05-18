@@ -151,15 +151,62 @@ thô thành **vector embedding 16 chiều** đại diện cho «chữ ký hành 
     else:
         pair_df = st.session_state["pair_df"]
 
-        col_t1, col_t2, col_t3 = st.columns(3)
-        with col_t1:
-            epochs = st.slider("Số epochs", 5, 100, 30, key="t2_epochs")
-        with col_t2:
-            batch_size = st.selectbox("Batch size", [16, 32, 64, 128], index=1, key="t2_bs")
-        with col_t3:
-            test_split = st.slider("Test split %", 10, 40, 20, key="t2_split")
+        train_mode = st.radio(
+            "Nguồn dữ liệu huấn luyện",
+            options=[
+                "🧬 Train bằng Data mô phỏng",
+                "📤 Upload File của bạn để Train",
+            ],
+            horizontal=True,
+            key="t2_train_mode",
+            help="Bản demo dùng dữ liệu mô phỏng do app sinh; tuỳ chọn upload "
+                 "minh hoạ khả năng nhận file thực tế khi triển khai vận hành.",
+        )
 
-        if st.button("🏋️ Train Siamese Network", type="primary", key="t2_train_btn"):
+        use_upload_mode = train_mode.startswith("📤")
+
+        if use_upload_mode:
+            st.markdown("##### 📤 Upload bộ dữ liệu CSV của bạn")
+            st.caption(
+                "Định dạng kỳ vọng: mỗi dòng là một phiên đăng nhập của khách hàng, "
+                "gồm các đặc trưng hành vi (áp lực ngón, gyro, touch area…) "
+                "và cột định danh user."
+            )
+            uploaded = st.file_uploader(
+                "Chọn file .csv",
+                type=["csv"],
+                key="t2_upload_csv",
+                help="File chỉ phục vụ minh hoạ giao diện trong bản demo.",
+            )
+            if uploaded is not None:
+                try:
+                    df_up = pd.read_csv(uploaded)
+                    st.success(
+                        f"✅ Đã đọc **{uploaded.name}** — "
+                        f"{len(df_up):,} dòng × {df_up.shape[1]} cột."
+                    )
+                    st.markdown("**Xem trước 20 dòng đầu:**")
+                    st.dataframe(df_up.head(20), use_container_width=True)
+                except Exception as e:
+                    st.error(f"❌ Không đọc được file CSV: {e}")
+            st.info(
+                "💡 *Trong bản demo này, hệ thống vẫn dùng dữ liệu mô phỏng do app "
+                "sinh ở tab **Data Mô phỏng Hành vi** để huấn luyện thực tế. "
+                "Tuỳ chọn upload phục vụ trực quan rằng giải pháp có thể nhận "
+                "dữ liệu thật từ ngân hàng khi triển khai vận hành. "
+                "Vui lòng chuyển về **🧬 Train bằng Data mô phỏng** để chạy huấn luyện.*"
+            )
+
+        if not use_upload_mode:
+            col_t1, col_t2, col_t3 = st.columns(3)
+            with col_t1:
+                epochs = st.slider("Số epochs", 5, 100, 30, key="t2_epochs")
+            with col_t2:
+                batch_size = st.selectbox("Batch size", [16, 32, 64, 128], index=1, key="t2_bs")
+            with col_t3:
+                test_split = st.slider("Test split %", 10, 40, 20, key="t2_split")
+
+        if (not use_upload_mode) and st.button("🏋️ Train Siamese Network", type="primary", key="t2_train_btn"):
             import tensorflow as tf
             from sklearn.model_selection import train_test_split
             from sklearn.preprocessing import StandardScaler
