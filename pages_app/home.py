@@ -7,8 +7,13 @@ inject_pastel_css()
 # ── Hero ───────────────────────────────────────────────────────────
 st.markdown("<div class='hero-tag'>🌸 SINH TRẮC HỌC HÀNH VI · SIAMESE NETWORK</div>",
             unsafe_allow_html=True)
-st.markdown("<div class='hero-title'>DEMO SIAMESE NETWORK (MLP)</div>",
-            unsafe_allow_html=True)
+st.markdown(
+    "<div class='hero-title' style='font-size:32px;line-height:1.25;letter-spacing:.3px'>"
+    "Hệ thống AI Siamese Network trong xác thực sinh trắc học hành vi<br>"
+    "phòng chống chiếm đoạt tài khoản ngân hàng (ATO)"
+    "</div>",
+    unsafe_allow_html=True,
+)
 st.markdown(
     "<div class='hero-subtitle'>"
     "Phiên bản Demo cho cuộc thi Ý tưởng đổi mới sáng tạo số<br>"
