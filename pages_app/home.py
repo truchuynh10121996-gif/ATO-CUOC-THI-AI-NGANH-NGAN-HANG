@@ -91,7 +91,7 @@ st.write("")
 
 # ── Cards giới thiệu ───────────────────────────────────────────────
 st.markdown("### 🎯 Khám phá giải pháp")
-c1, c2 = st.columns(2)
+c1, c2, c3 = st.columns(3)
 
 with c1:
     st.markdown(
@@ -124,5 +124,21 @@ DeepFake và ảnh tĩnh thiếu dòng máu thật nên phổ tần số phẳng
     )
     if st.button("Khám phá rPPG →", key="goto_rppg", use_container_width=True):
         st.switch_page("pages_app/tier3.py")
+
+with c3:
+    st.markdown(
+        f"""
+<div class='pastel-card' style='background:linear-gradient(135deg,#FFF1E6 0%,#FFE6D6 100%)'>
+<h3>💳 AI hỗ trợ Demo</h3>
+<b>Toolbox bổ trợ — Mở rộng</b><br>
+<span style='color:#8C7785;font-size:13px'>LightGBM · SHAP · Gemini</span><br><br>
+Bộ công cụ AI hỗ trợ demo Siamese Network: phân tích giao dịch chuyển tiền,
+chấm điểm rủi ro <b>0–100%</b> kèm <b>SHAP</b> giải thích và chatbot Gemini đối thoại.
+</div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if st.button("Khám phá AI hỗ trợ →", key="goto_ai_support", use_container_width=True):
+        st.switch_page("pages_app/tier1.py")
 
 st.write("")

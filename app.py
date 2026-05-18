@@ -1,5 +1,5 @@
 """
-🌸 GIẢI PHÁP FRAUD DETECTION ATO 🌸
+🧠 DEMO SIAMESE NETWORK — SINH TRẮC HỌC HÀNH VI 🧠
 Phiên bản Demo cho cuộc thi Ý tưởng đổi mới sáng tạo số
 Ngân hàng Nhà nước khu vực 13.
 
@@ -8,8 +8,8 @@ Entry point — sử dụng st.navigation để định tuyến giữa các tran
 import streamlit as st
 
 st.set_page_config(
-    page_title="Fraud Detection ATO",
-    page_icon="🌸",
+    page_title="Demo Siamese Network — Sinh trắc học hành vi",
+    page_icon="🧠",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -36,9 +36,9 @@ pg = st.navigation(PAGES)
 with st.sidebar:
     st.markdown(
         "<div style='text-align:center;padding:14px 0 6px'>"
-        "<div style='font-size:30px'>🌸</div>"
+        "<div style='font-size:30px'>🧠</div>"
         "<div style='font-weight:800;font-size:17px;color:#A85070;line-height:1.2'>"
-        "Fraud Detection<br>ATO</div>"
+        "Demo Siamese Network<br>Sinh trắc học hành vi</div>"
         "<div style='font-size:11px;color:#8C7785;margin-top:4px'>"
         "NHNN Khu vực 13 · Demo</div>"
         "</div>",

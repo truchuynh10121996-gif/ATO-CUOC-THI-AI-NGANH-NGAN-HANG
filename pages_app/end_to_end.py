@@ -1,4 +1,4 @@
-"""🔗 Demo End-to-End — Hợp nhất LightGBM (Tầng 1) + Siamese Network (Tầng 2).
+"""🔗 Demo End-to-End — Hợp nhất LightGBM (giao dịch) + Siamese Network (sinh trắc học hành vi).
 
 Logic:
   - LightGBM cho điểm rủi ro GIAO DỊCH:  p_lgbm ∈ [0, 1]      (cao = bất thường)
@@ -29,12 +29,12 @@ from lib_gemini import render_chat_panel
 
 inject_pastel_css()
 
-st.markdown("<div class='hero-tag'>🔗 END-TO-END · TẦNG 1 + TẦNG 2</div>",
+st.markdown("<div class='hero-tag'>🔗 END-TO-END · LIGHTGBM + SIAMESE</div>",
             unsafe_allow_html=True)
 st.title("Demo End-to-End — Hợp nhất LightGBM + Siamese Network")
 st.caption(
-    "Một giao dịch đi qua đồng thời 2 lớp phòng vệ: kiểm tra **bất thường giao dịch** "
-    "(Tầng 1) + xác minh **sinh trắc học hành vi** (Tầng 2) → điểm rủi ro hợp nhất."
+    "Một giao dịch đi qua đồng thời 2 mô hình: kiểm tra **bất thường giao dịch** "
+    "(LightGBM hỗ trợ) + xác minh **sinh trắc học hành vi** (Siamese) → điểm rủi ro hợp nhất."
 )
 
 # ─────────────────────────────────────────────────────────────────────
@@ -46,10 +46,10 @@ profile_ready  = "t1_profile_df" in st.session_state
 raw_df_ready   = "raw_df" in st.session_state
 
 missing = []
-if not t1_trained:    missing.append("📘 **Tầng 1**: train model LightGBM tại trang *Tầng 1 → Huấn luyện model*")
-if not t2_trained:    missing.append("📗 **Tầng 2**: train Siamese Network tại trang *Tầng 2 → Siamese Network — training Model MLP*")
-if not profile_ready: missing.append("📤 **Profile khách hàng**: upload CSV tại trang *Tầng 1 → Demo giao dịch realtime*")
-if not raw_df_ready:  missing.append("🧬 **Bộ dữ liệu hành vi**: tạo tại trang *Tầng 2 → Data Mô phỏng Hành vi*")
+if not t1_trained:    missing.append("📘 **LightGBM (giao dịch)**: train model tại trang *AI hỗ trợ Demo Siamese Network → Huấn luyện model*")
+if not t2_trained:    missing.append("📗 **Siamese (hành vi)**: train Siamese Network tại trang *Kiến trúc Siamese Network — model MLP → Siamese Network — training Model MLP*")
+if not profile_ready: missing.append("📤 **Profile khách hàng**: upload CSV tại trang *AI hỗ trợ Demo Siamese Network → Demo giao dịch realtime*")
+if not raw_df_ready:  missing.append("🧬 **Bộ dữ liệu hành vi**: tạo tại trang *Kiến trúc Siamese Network — model MLP → Data Mô phỏng Hành vi*")
 
 if missing:
     st.warning("⚠️ Cần hoàn tất các bước sau trước khi chạy End-to-End:")
@@ -136,9 +136,9 @@ tab_demo, tab_compare = st.tabs([
 with tab_demo:
     col_l, col_r = st.columns(2, gap="large")
 
-    # ─── CỘT TRÁI: Tầng 1 — LightGBM giao dịch ──────────────────────
+    # ─── CỘT TRÁI: LightGBM hỗ trợ — giao dịch ──────────────────────
     with col_l:
-        st.markdown(f"### 💳 Tầng 1 — Giao dịch chuyển tiền")
+        st.markdown(f"### 💳 Giao dịch chuyển tiền (LightGBM hỗ trợ)")
         st.caption("Model LightGBM phân tích giao dịch dựa trên lịch sử 80 ngày.")
 
         # Gợi ý ngày = ngày sau giao dịch cuối
@@ -168,9 +168,9 @@ with tab_demo:
                                     value=500_000, format="%d", key="e2e_amt")
         e_dev = st.selectbox("📱 Thiết bị giao dịch", options=device_options, key="e2e_dev")
 
-    # ─── CỘT PHẢI: Tầng 2 — Siamese hành vi ─────────────────────────
+    # ─── CỘT PHẢI: Siamese — sinh trắc học hành vi ──────────────────
     with col_r:
-        st.markdown(f"### 🧠 Tầng 2 — Phiên hành vi của khách hàng")
+        st.markdown(f"### 🧠 Sinh trắc học hành vi — Phiên đăng nhập (Siamese)")
         st.caption(
             f"Siamese Network so sánh «chữ ký gõ phím» trong phiên hiện tại với "
             f"**hồ sơ hành vi đã lưu của khách hàng {name_user}**."
@@ -204,17 +204,17 @@ with tab_demo:
 
     # ─── Trọng số fusion + nút Run ──────────────────────────────────
     st.divider()
-    st.markdown("##### ⚖️ Hợp nhất 2 tầng — Trọng số fusion")
+    st.markdown("##### ⚖️ Hợp nhất 2 mô hình — Trọng số fusion")
     w1, w2, w3 = st.columns([2, 1, 1])
     with w1:
         e_w_lgbm = st.slider(
-            "Trọng số Tầng 1 (LightGBM — giao dịch)",
+            "Trọng số LightGBM (giao dịch)",
             min_value=0.0, max_value=1.0, value=0.5, step=0.05, key="e2e_w_lgbm",
-            help="0 = chỉ tin Tầng 2 · 1 = chỉ tin Tầng 1 · 0.5 = cân bằng",
+            help="0 = chỉ tin Siamese · 1 = chỉ tin LightGBM · 0.5 = cân bằng",
         )
     e_w_siam = 1.0 - e_w_lgbm
-    w2.metric("Tầng 1", f"{e_w_lgbm:.0%}")
-    w3.metric("Tầng 2", f"{e_w_siam:.0%}")
+    w2.metric("LightGBM", f"{e_w_lgbm:.0%}")
+    w3.metric("Siamese", f"{e_w_siam:.0%}")
     st.caption(
         f"Công thức: **p_final = {e_w_lgbm:.2f} × p_LightGBM + {e_w_siam:.2f} × p_ATO**, "
         f"trong đó *p_ATO = 1 − similarity* (Siamese)."
@@ -228,7 +228,7 @@ with tab_demo:
 
         with st.status("⏳ Đang chạy 2 model song song…", expanded=True) as status:
             # ── (1) LIGHTGBM ──────────────────────────────────
-            st.write("📘 Tầng 1: Tính 15 feature cho giao dịch…")
+            st.write("📘 LightGBM (giao dịch): Tính 15 feature cho giao dịch…")
             new_ts = pd.Timestamp.combine(e_date, time(int(e_hour), int(e_min)))
             feats = compute_realtime_features(
                 history_df=profile_df, new_ts=new_ts,
@@ -238,11 +238,11 @@ with tab_demo:
             )
             x_row = pd.DataFrame([[feats.get(c, 0) for c in lgbm_features]],
                                  columns=lgbm_features)
-            st.write("📘 Tầng 1: Chấm điểm bằng LightGBM…")
+            st.write("📘 LightGBM (giao dịch): Chấm điểm bằng LightGBM…")
             p_lgbm = float(lgbm_model.predict_proba(x_row)[0, 1])
 
             # ── (2) SIAMESE ───────────────────────────────────
-            st.write("📗 Tầng 2: Lấy «chữ ký gõ phím» của khách hàng…")
+            st.write("📗 Siamese (hành vi): Lấy «chữ ký gõ phím» của khách hàng…")
             ref_sessions = raw_df[raw_df["user_id"] == bound_persona["id"]]
             ref_vec = ref_sessions[FEATURE_COLS].mean().values.astype(np.float32)
 
@@ -262,7 +262,7 @@ with tab_demo:
 
             ref_s = scaler.transform(ref_vec.reshape(1, -1))
             new_s = scaler.transform(new_vec.reshape(1, -1))
-            st.write("📗 Tầng 2: Chấm độ tương đồng bằng Siamese Network…")
+            st.write("📗 Siamese (hành vi): Chấm độ tương đồng bằng Siamese Network…")
             sim = float(siam_model.predict([ref_s, new_s], verbose=0).flatten()[0])
             p_ato = 1.0 - sim
             emb_ref = mlp_backbone.predict(ref_s, verbose=0).flatten()
@@ -324,11 +324,11 @@ with tab_demo:
                     PALETTE["peach_dark"] if p < 0.65 else PALETTE["rose_dark"])
 
         g1.plotly_chart(_make_gauge(r["p_lgbm"]*100,
-                                     "📘 Tầng 1 (LightGBM)<br>Rủi ro giao dịch",
+                                     "📘 LightGBM (giao dịch)<br>Rủi ro giao dịch",
                                      _risk_color),
                          use_container_width=True)
         g2.plotly_chart(_make_gauge(r["p_ato"]*100,
-                                     "📗 Tầng 2 (Siamese)<br>Rủi ro ATO",
+                                     "📗 Siamese (hành vi)<br>Rủi ro ATO",
                                      _risk_color),
                          use_container_width=True)
         g3.plotly_chart(_make_gauge(p_final_live*100,
@@ -356,7 +356,7 @@ with tab_demo:
 
         # SHAP cho LightGBM
         with ex_l:
-            st.markdown("#### 📘 Đóng góp của Tầng 1 (LightGBM)")
+            st.markdown("#### 📘 Đóng góp của LightGBM (giao dịch)")
             st.caption("Đỏ = đẩy về phía Fraud · Xanh = kéo về phía Hợp lệ")
             try:
                 _, shap_vals, base_val = get_shap_values(lgbm_model, r["x_row"])
@@ -387,7 +387,7 @@ with tab_demo:
 
         # Delta features cho Siamese
         with ex_r:
-            st.markdown("#### 📗 Đóng góp của Tầng 2 (Siamese)")
+            st.markdown("#### 📗 Đóng góp của Siamese (hành vi)")
             st.caption("% lệch mỗi đặc trưng so với «chữ ký» của khách hàng")
             delta_pct = (r["new_vec"] - r["ref_vec"]) / (np.abs(r["ref_vec"]) + 1e-9) * 100
             order = np.argsort(np.abs(delta_pct))[::-1][:8]
@@ -406,7 +406,7 @@ with tab_demo:
             plotly_pastel_layout(fig_d, height=360)
             st.plotly_chart(fig_d, use_container_width=True)
 
-            st.metric("Similarity (Tầng 2)", f"{r['sim']*100:.1f}%",
+            st.metric("Similarity (Siamese)", f"{r['sim']*100:.1f}%",
                       help="100% = chính chủ tuyệt đối")
             st.metric("Khoảng cách Euclid (embedding 16D)", f"{r['dist']:.4f}")
 
@@ -424,14 +424,14 @@ with tab_demo:
             "Ngân hàng nhận":       meta["bank"],
             "Thời gian":            meta["timestamp"].strftime("%d/%m/%Y %H:%M"),
             "Thiết bị":             meta["device"],
-            "Tầng 1 — p_LightGBM":  f"{r['p_lgbm']*100:.2f}%",
-            "Tầng 2 — Similarity":  f"{r['sim']*100:.2f}%",
-            "Tầng 2 — p_ATO":       f"{r['p_ato']*100:.2f}%",
-            "Trọng số":             f"Tầng 1: {e_w_lgbm:.0%} · Tầng 2: {e_w_siam:.0%}",
+            "LightGBM — p_giao_dịch":  f"{r['p_lgbm']*100:.2f}%",
+            "Siamese — Similarity":    f"{r['sim']*100:.2f}%",
+            "Siamese — p_ATO":         f"{r['p_ato']*100:.2f}%",
+            "Trọng số":                f"LightGBM: {e_w_lgbm:.0%} · Siamese: {e_w_siam:.0%}",
             "Điểm Fraud cuối":      f"{p_final_live*100:.2f}%",
             "Quyết định hệ thống":  ("APPROVED" if p_final_live < 0.3 else
                                       "REVIEW" if p_final_live < 0.65 else "BLOCKED"),
-            "Top yếu tố Tầng 1":    [f"{f}: {v:+.3f}" for f, v in top_lgbm[:5]],
+            "Top yếu tố LightGBM":  [f"{f}: {v:+.3f}" for f, v in top_lgbm[:5]],
         }
         render_chat_panel(
             context=ctx,
@@ -439,7 +439,7 @@ with tab_demo:
             key_prefix="e2e_chat",
             suggested_questions=[
                 "Vì sao điểm hợp nhất lại ra như vậy?",
-                "Tầng 1 hay Tầng 2 đóng vai trò chính trong quyết định này?",
+                "LightGBM hay Siamese đóng vai trò chính trong quyết định này?",
                 "Giải thích cho khách hàng bằng ngôn ngữ phổ thông.",
             ],
             title="💬 Phân tích của AI (Gemini) — Giải thích quyết định End-to-End",
@@ -477,17 +477,17 @@ with tab_compare:
 
     # ── Bảng so sánh ────────────────────────────────────────────────
     comp_df = pd.DataFrame([
-        {"Chiến lược":     "📘 Chỉ Tầng 1 (LightGBM)",
+        {"Chiến lược":     "📘 Chỉ LightGBM (giao dịch)",
          "Điểm Fraud (%)": f"{p_lgbm*100:.2f}",
          "Quyết định":     _decision(p_lgbm),
          "Phát hiện":      "Bất thường giao dịch",
          "Điểm yếu":       "Bỏ qua hành vi đăng nhập"},
-        {"Chiến lược":     "📗 Chỉ Tầng 2 (Siamese)",
+        {"Chiến lược":     "📗 Chỉ Siamese (hành vi)",
          "Điểm Fraud (%)": f"{p_ato*100:.2f}",
          "Quyết định":     _decision(p_ato),
          "Phát hiện":      "Kẻ mạo danh đăng nhập",
          "Điểm yếu":       "Bỏ qua bối cảnh giao dịch"},
-        {"Chiến lược":     "🔗 Hợp nhất 2 tầng",
+        {"Chiến lược":     "🔗 Hợp nhất 2 mô hình",
          "Điểm Fraud (%)": f"{p_final*100:.2f}",
          "Quyết định":     _decision(p_final),
          "Phát hiện":      "Cả 2 — bao quát hơn",
@@ -555,29 +555,29 @@ with tab_compare:
         st.plotly_chart(fig_r, use_container_width=True)
 
     # ── Phân tách Decision Matrix ───────────────────────────────────
-    st.markdown("##### 🧩 Ma trận quyết định — Tầng 1 vs Tầng 2")
+    st.markdown("##### 🧩 Ma trận quyết định — LightGBM vs Siamese")
     st.caption(
-        "Mỗi ô là một kết hợp giữa quyết định của 2 tầng (chấm điểm độc lập). "
+        "Mỗi ô là một kết hợp giữa quyết định của 2 mô hình (chấm điểm độc lập). "
         "Việc kết hợp giúp **giảm cả False Positive và False Negative**."
     )
     matrix_html = f"""
 <div style='display:grid;grid-template-columns:120px repeat(3,1fr);gap:8px;font-size:13px'>
   <div></div>
-  <div style='text-align:center;font-weight:700;color:{PALETTE['rose_dark']}'>📗 T2: APPROVED</div>
-  <div style='text-align:center;font-weight:700;color:{PALETTE['rose_dark']}'>📗 T2: REVIEW</div>
-  <div style='text-align:center;font-weight:700;color:{PALETTE['rose_dark']}'>📗 T2: BLOCKED</div>
+  <div style='text-align:center;font-weight:700;color:{PALETTE['rose_dark']}'>📗 SIAM: APPROVED</div>
+  <div style='text-align:center;font-weight:700;color:{PALETTE['rose_dark']}'>📗 SIAM: REVIEW</div>
+  <div style='text-align:center;font-weight:700;color:{PALETTE['rose_dark']}'>📗 SIAM: BLOCKED</div>
 
-  <div style='font-weight:700;color:{PALETTE['lavender_dark']};display:flex;align-items:center'>📘 T1: APPROVED</div>
+  <div style='font-weight:700;color:{PALETTE['lavender_dark']};display:flex;align-items:center'>📘 LGBM: APPROVED</div>
   <div class='pastel-card' style='background:#E7F7EF;text-align:center'>✅ <b>APPROVE</b><br><small>Cả 2 OK → pass</small></div>
   <div class='pastel-card' style='background:#FFF4DE;text-align:center'>⚠️ <b>OTP</b><br><small>GD ổn nhưng hành vi lạ</small></div>
   <div class='pastel-card' style='background:#FCE4EC;text-align:center'>🚫 <b>BLOCK</b><br><small>Mạo danh thật sự</small></div>
 
-  <div style='font-weight:700;color:{PALETTE['lavender_dark']};display:flex;align-items:center'>📘 T1: REVIEW</div>
+  <div style='font-weight:700;color:{PALETTE['lavender_dark']};display:flex;align-items:center'>📘 LGBM: REVIEW</div>
   <div class='pastel-card' style='background:#FFF4DE;text-align:center'>⚠️ <b>OTP</b><br><small>GD lạ nhưng đúng người</small></div>
   <div class='pastel-card' style='background:#FCE4EC;text-align:center'>🚫 <b>BLOCK</b><br><small>2 dấu hiệu bất thường</small></div>
   <div class='pastel-card' style='background:#FCE4EC;text-align:center'>🚫 <b>BLOCK</b><br><small>Rủi ro rất cao</small></div>
 
-  <div style='font-weight:700;color:{PALETTE['lavender_dark']};display:flex;align-items:center'>📘 T1: BLOCKED</div>
+  <div style='font-weight:700;color:{PALETTE['lavender_dark']};display:flex;align-items:center'>📘 LGBM: BLOCKED</div>
   <div class='pastel-card' style='background:#FCE4EC;text-align:center'>🚫 <b>BLOCK</b><br><small>Đợi xác minh trực tiếp</small></div>
   <div class='pastel-card' style='background:#FCE4EC;text-align:center'>🚫 <b>BLOCK</b><br><small>Khoá tài khoản</small></div>
   <div class='pastel-card' style='background:#FCE4EC;text-align:center'>🚫 <b>BLOCK</b><br><small>Cảnh báo khẩn cấp</small></div>
@@ -616,8 +616,8 @@ with tab_compare:
     st.divider()
     expert_ctx = {
         "Khách hàng":               f"{name_user} ({user_id})",
-        "Điểm Tầng 1 (LightGBM)":   f"{p_lgbm*100:.2f}%  → {_decision(p_lgbm)}",
-        "Điểm Tầng 2 (Siamese)":    f"{p_ato*100:.2f}%  → {_decision(p_ato)}",
+        "Điểm LightGBM (giao dịch)": f"{p_lgbm*100:.2f}%  → {_decision(p_lgbm)}",
+        "Điểm Siamese (hành vi)":    f"{p_ato*100:.2f}%  → {_decision(p_ato)}",
         "Điểm hợp nhất":            f"{p_final*100:.2f}%  → {_decision(p_final)}",
         "Trọng số đang dùng":       f"LightGBM={e_w_lgbm:.2f} · Siamese={e_w_siam:.2f}",
         "Kịch bản hành vi":         r["scen_label"],
@@ -640,7 +640,7 @@ with tab_compare:
         suggested_questions=[
             "Phân tích sự khác biệt giữa 3 chiến lược.",
             "Nên đặt trọng số fusion thế nào cho phân khúc khách hàng cao cấp?",
-            "Khi nào nên tin Tầng 1 hơn Tầng 2 và ngược lại?",
+            "Khi nào nên tin LightGBM hơn Siamese và ngược lại?",
         ],
         title="💬 Phân tích của Chuyên gia (Gemini) — Diễn giải so sánh số liệu",
     )
