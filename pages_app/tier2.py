@@ -16,7 +16,13 @@ inject_pastel_css()
 matplotlib_pastel()
 
 st.markdown("<div class='hero-tag'>🧠 SIAMESE NETWORK · MLP</div>", unsafe_allow_html=True)
-st.title("Sinh trắc học hành vi")
+st.markdown(
+    "<h1 style='font-size:30px;line-height:1.3;color:#A85070;margin:.3em 0 .2em'>"
+    "Kiến trúc Siamese Network (Deep Learning MLP) "
+    "ứng dụng trong dự báo Sinh trắc học hành vi"
+    "</h1>",
+    unsafe_allow_html=True,
+)
 st.caption(
     "Câu hỏi cốt lõi: *User đang thao tác có giống «chính họ» trong quá khứ không?* — "
     "ứng dụng cảm biến điện thoại (áp lực ngón, gyro, touch area) để phát hiện kẻ mạo danh "
@@ -406,7 +412,7 @@ with tab_demo:
         st.dataframe(df_ref, hide_index=True, use_container_width=True, height=460)
     with pv2:
         st.markdown(
-            f"##### 📡 Bộ hành vi thu thập Realtime khi có giao dịch được thực hiện"
+            f"##### 📡 Bộ hành vi thu thập Realtime khi phát sinh giao dịch mới"
         )
         st.caption(rt_caption)
         df_rt = pd.DataFrame({
