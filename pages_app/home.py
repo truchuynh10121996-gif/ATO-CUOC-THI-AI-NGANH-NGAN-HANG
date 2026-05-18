@@ -1,13 +1,13 @@
-"""🏠 Trang chủ — sơ đồ kiến trúc 3 lớp phòng vệ."""
+"""🏠 Trang chủ — sơ đồ kiến trúc Siamese Network (MLP) & rPPG."""
 import streamlit as st
 from theme import inject_pastel_css, PALETTE
 
 inject_pastel_css()
 
 # ── Hero ───────────────────────────────────────────────────────────
-st.markdown("<div class='hero-tag'>🌸 BANKING FRAUD &amp; ATO PREVENTION</div>",
+st.markdown("<div class='hero-tag'>🌸 SINH TRẮC HỌC HÀNH VI · SIAMESE NETWORK</div>",
             unsafe_allow_html=True)
-st.markdown("<div class='hero-title'>GIẢI PHÁP FRAUD DETECTION ATO</div>",
+st.markdown("<div class='hero-title'>DEMO SIAMESE NETWORK (MLP)</div>",
             unsafe_allow_html=True)
 st.markdown(
     "<div class='hero-subtitle'>"
@@ -19,17 +19,18 @@ st.markdown(
 
 st.markdown(
     "<p style='text-align:center;font-size:16px;color:#5B4A55;max-width:780px;margin:auto'>"
-    "Giải pháp <b>3 lớp phòng vệ</b> kết hợp Machine Learning, sinh trắc học hành vi "
-    "và công nghệ phát hiện sự sống <i>(rPPG)</i> — bảo vệ khách hàng trước rủi ro "
-    "<b>chiếm đoạt tài khoản (Account Takeover)</b> và <b>DeepFake</b>."
+    "Giải pháp <b>Sinh trắc học hành vi</b> sử dụng <b>Siamese Network (MLP)</b> "
+    "làm kiến trúc trung tâm, học «<b>chữ ký gõ phím</b>» riêng của từng khách hàng — "
+    "kết hợp công nghệ <b>rPPG</b> phát hiện sự sống để chống <b>DeepFake</b> "
+    "và rủi ro <b>chiếm đoạt tài khoản (Account Takeover)</b>."
     "</p>",
     unsafe_allow_html=True,
 )
 
 st.write("")
 
-# ── Sơ đồ kiến trúc 3 lớp ──────────────────────────────────────────
-st.markdown("### 🗺️ Kiến trúc 3 lớp phòng vệ")
+# ── Sơ đồ kiến trúc Siamese Network (MLP) + rPPG ──────────────────
+st.markdown("### 🗺️ Kiến trúc giải pháp")
 
 DIAGRAM = """
 digraph G {
@@ -39,20 +40,29 @@ digraph G {
           fontsize=12, fontcolor="#5B4A55", penwidth=2];
     edge [color="#E48BA7", penwidth=2, fontname="Segoe UI", fontcolor="#8C7785"];
 
-    customer  [label="👤\\nKHÁCH HÀNG\\nthực hiện giao dịch",
+    customer  [label="👤\\nKHÁCH HÀNG\\nđăng nhập / giao dịch",
                fillcolor="#FFEAF1", color="#E48BA7"];
 
-    subgraph cluster_layers {
-        label="3 LỚP PHÒNG VỆ AI";
+    subgraph cluster_main {
+        label="GIẢI PHÁP CHÍNH";
         labelloc="t"; fontsize=13; fontcolor="#A85070";
         style="rounded,filled"; fillcolor="#FFFAFC"; color="#F4D7E1";
 
-        tier1 [label="💳 TẦNG 1\\nPhát hiện giao dịch Fraud\\n(LightGBM)",
-               fillcolor="#FFD6B8", color="#F5A678"];
-        tier2 [label="🧠 TẦNG 2\\nSinh trắc học hành vi\\n(Siamese + MLP)",
-               fillcolor="#D7C4F2", color="#A993E0"];
-        tier3 [label="🫀 TẦNG 3\\nChống DeepFake bằng rPPG\\n(POS + Multi-ROI)",
-               fillcolor="#BFE7D6", color="#7FCBA9"];
+        capture [label="⌨️\\nThu thập tín hiệu\\n(áp lực, gyro, dwell, flight)",
+                 fillcolor="#FFF3E0", color="#F5C77E"];
+        siamese [label="🧠 SIAMESE NETWORK (MLP)\\nHọc «chữ ký gõ phím»\\ncủa từng khách hàng",
+                 fillcolor="#D7C4F2", color="#A993E0"];
+        verify  [label="🔐\\nSo khớp embedding\\n(cosine similarity)",
+                 fillcolor="#E6E0FA", color="#A993E0"];
+    }
+
+    subgraph cluster_ext {
+        label="MỞ RỘNG";
+        labelloc="t"; fontsize=12; fontcolor="#7FCBA9";
+        style="rounded,dashed,filled"; fillcolor="#F4FCF7"; color="#BFE7D6";
+
+        rppg [label="🫀 rPPG\\nChống DeepFake\\n(POS + Multi-ROI)",
+              fillcolor="#BFE7D6", color="#7FCBA9"];
     }
 
     decision  [label="🛡️ KẾT LUẬN AI\\nAPPROVED / REVIEW / BLOCKED",
@@ -60,67 +70,51 @@ digraph G {
     bank      [label="🏦\\nHỆ THỐNG\\nCORE BANKING",
                fillcolor="#FFF7E6", color="#F5C77E"];
 
-    customer -> tier1 [label="giao dịch"];
-    tier1    -> tier2 [label="nếu nghi ngờ"];
-    tier2    -> tier3 [label="nếu cần eKYC"];
-    tier3    -> decision;
-    tier1    -> decision [style=dashed, label="approve nhanh"];
-    tier2    -> decision [style=dashed];
+    customer -> capture [label="thao tác"];
+    capture  -> siamese;
+    siamese  -> verify [label="embedding"];
+    verify   -> decision;
+    verify   -> rppg [style=dashed, label="khi cần eKYC"];
+    rppg     -> decision [style=dashed];
     decision -> bank;
 }
 """
 st.graphviz_chart(DIAGRAM, use_container_width=True)
 
 st.caption(
-    "💡 *Mỗi tầng là một câu hỏi độc lập: «Giao dịch này có lạ không?» → "
-    "«Có đúng người chủ tài khoản đang thao tác không?» → «Đây có phải mặt người thật không?». "
-    "Chỉ khi cả 3 đều OK, giao dịch mới được duyệt tự động.*"
+    "💡 *Siamese Network (MLP) là kiến trúc trung tâm: học và so khớp «chữ ký hành vi» "
+    "của khách hàng — phát hiện kẻ mạo danh dù biết mật khẩu/OTP. "
+    "rPPG là lớp mở rộng cho luồng eKYC: phát hiện DeepFake/ảnh tĩnh bằng tín hiệu nhịp tim qua da.*"
 )
 
 st.write("")
 
-# ── Cards 3 tầng ───────────────────────────────────────────────────
-st.markdown("### 🎯 Khám phá từng tầng")
+# ── Cards giới thiệu ───────────────────────────────────────────────
+st.markdown("### 🎯 Khám phá giải pháp")
 c1, c2, c3 = st.columns(3)
 
 with c1:
     st.markdown(
         f"""
-<div class='pastel-card' style='background:linear-gradient(135deg,#FFF1E6 0%,#FFE6D6 100%)'>
-<h3>💳 Tầng 1</h3>
-<b>Phát hiện giao dịch Fraud ATO</b><br>
-<span style='color:#8C7785;font-size:13px'>Model: LightGBM</span><br><br>
-Phân tích hành vi <b>giao dịch</b>: tần suất, số tiền, người nhận mới, thiết bị, thời gian.
-Mỗi giao dịch được chấm điểm rủi ro 0–100% kèm <b>SHAP</b> giải thích lý do.
-</div>
-        """,
-        unsafe_allow_html=True,
-    )
-    if st.button("Khám phá Tầng 1 →", key="goto_t1", use_container_width=True):
-        st.switch_page("pages_app/tier1.py")
-
-with c2:
-    st.markdown(
-        f"""
 <div class='pastel-card' style='background:linear-gradient(135deg,#F5EFFF 0%,#EBE0FA 100%)'>
-<h3>🧠 Tầng 2</h3>
-<b>Sinh trắc học hành vi</b><br>
-<span style='color:#8C7785;font-size:13px'>Siamese Network + MLP</span><br><br>
+<h3>🧠 Siamese Network (MLP)</h3>
+<b>Sinh trắc học hành vi — Giải pháp chính</b><br>
+<span style='color:#8C7785;font-size:13px'>Siamese Network + MLP encoder</span><br><br>
 Học «<b>chữ ký gõ phím</b>» riêng của từng khách hàng từ áp lực ngón tay,
 tốc độ chạm, cảm biến gyro… Phát hiện kẻ mạo danh dù biết mật khẩu/OTP.
 </div>
         """,
         unsafe_allow_html=True,
     )
-    if st.button("Khám phá Tầng 2 →", key="goto_t2", use_container_width=True):
+    if st.button("Khám phá Siamese Network →", key="goto_siamese", use_container_width=True):
         st.switch_page("pages_app/tier2.py")
 
-with c3:
+with c2:
     st.markdown(
         f"""
 <div class='pastel-card' style='background:linear-gradient(135deg,#E6F7EF 0%,#D6F0E2 100%)'>
-<h3>🫀 Tầng 3</h3>
-<b>Chống DeepFake bằng rPPG</b><br>
+<h3>🫀 rPPG Anti-DeepFake</h3>
+<b>Phát hiện sự sống — Mở rộng</b><br>
 <span style='color:#8C7785;font-size:13px'>POS Algorithm + Multi-ROI</span><br><br>
 Phân tích dao động vi tế của kênh màu trên da mặt để tái lập tín hiệu nhịp tim.
 DeepFake và ảnh tĩnh thiếu dòng máu thật nên phổ tần số phẳng — bị chặn ngay tức thì.
@@ -128,7 +122,23 @@ DeepFake và ảnh tĩnh thiếu dòng máu thật nên phổ tần số phẳng
         """,
         unsafe_allow_html=True,
     )
-    if st.button("Khám phá Tầng 3 →", key="goto_t3", use_container_width=True):
+    if st.button("Khám phá rPPG →", key="goto_rppg", use_container_width=True):
         st.switch_page("pages_app/tier3.py")
+
+with c3:
+    st.markdown(
+        f"""
+<div class='pastel-card' style='background:linear-gradient(135deg,#FFF1E6 0%,#FFE6D6 100%)'>
+<h3>💳 AI hỗ trợ Demo</h3>
+<b>Toolbox bổ trợ — Mở rộng</b><br>
+<span style='color:#8C7785;font-size:13px'>LightGBM · SHAP · Gemini</span><br><br>
+Bộ công cụ AI hỗ trợ demo Siamese Network: phân tích giao dịch chuyển tiền,
+chấm điểm rủi ro <b>0–100%</b> kèm <b>SHAP</b> giải thích và chatbot Gemini đối thoại.
+</div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if st.button("Khám phá AI hỗ trợ →", key="goto_ai_support", use_container_width=True):
+        st.switch_page("pages_app/tier1.py")
 
 st.write("")

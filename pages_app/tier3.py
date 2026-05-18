@@ -14,7 +14,7 @@ from lib_gemini import render_chat_panel
 
 inject_pastel_css()
 
-st.markdown("<div class='hero-tag'>🫀 TẦNG 3 · rPPG ANTI-DEEPFAKE</div>", unsafe_allow_html=True)
+st.markdown("<div class='hero-tag'>🫀 rPPG ANTI-DEEPFAKE</div>", unsafe_allow_html=True)
 st.title("Công nghệ rPPG phát hiện nhịp tim qua da chống DeepFake")
 st.caption(
     "Phát hiện sự sống thật từ camera điện thoại — DeepFake không có nhịp tim "
@@ -95,7 +95,7 @@ with tab_concept:
 <li><b>Fully-synthetic</b> (AI tạo từ 0): không có máu → tín hiệu phẳng</li>
 <li><b>Face-swap</b> (ghép mặt lên video): tín hiệu có nhưng <b>HR nhảy loạn</b></li>
 <li>Phổ tần số <b>phẳng hoặc nhiễu trắng</b></li>
-<li>Cải tiến của Tầng 3: <b>HR Stability</b> bắt được cả face-swap</li>
+<li>Cải tiến của rPPG nâng cao: <b>HR Stability</b> bắt được cả face-swap</li>
 </ul>
 </div>
             """,
@@ -105,7 +105,7 @@ with tab_concept:
     st.markdown("#### 🔬 Cải tiến thuật toán so với rPPG cơ bản")
     st.markdown(
         """
-| Thuật toán | rPPG cơ bản | **Tầng 3 (nâng cao)** |
+| Thuật toán | rPPG cơ bản | **rPPG nâng cao (giải pháp)** |
 |---|---|---|
 | **Tín hiệu** | Kênh GREEN đơn thuần | **POS algorithm** (Wang 2017) — kết hợp 3 kênh RGB |
 | **Vùng phân tích** | Chỉ trán | **Trán + Má trái + Má phải** (multi-ROI) |

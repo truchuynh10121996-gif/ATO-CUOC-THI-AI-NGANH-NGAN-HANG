@@ -19,7 +19,7 @@ from lib_gemini import render_chat_panel
 inject_pastel_css()
 matplotlib_pastel()
 
-st.markdown("<div class='hero-tag'>💳 TẦNG 1 · LIGHTGBM</div>", unsafe_allow_html=True)
+st.markdown("<div class='hero-tag'>💳 AI HỖ TRỢ DEMO SIAMESE NETWORK</div>", unsafe_allow_html=True)
 st.title("Phát hiện giao dịch Fraud ATO")
 st.caption(
     "Mỗi giao dịch chuyển tiền được chấm rủi ro 0–100% bằng LightGBM — "
