@@ -412,7 +412,7 @@ with tab_demo:
         st.dataframe(df_ref, hide_index=True, use_container_width=True, height=460)
     with pv2:
         st.markdown(
-            f"##### 📡 Bộ hành vi thu thập Realtime khi phát sinh giao dịch mới"
+            f"##### 📡 Bộ hành vi thu thập Realtime khi có giao dịch mới"
         )
         st.caption(rt_caption)
         df_rt = pd.DataFrame({
