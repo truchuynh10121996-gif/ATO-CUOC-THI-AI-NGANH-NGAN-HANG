@@ -11,7 +11,7 @@ import os
 import time
 import streamlit as st
 
-DEFAULT_MODEL = "gemini-1.5-flash"
+DEFAULT_MODEL = "gemini-flash-latest"
 
 
 def get_api_key() -> str | None:
