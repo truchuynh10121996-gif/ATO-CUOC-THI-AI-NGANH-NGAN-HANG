@@ -74,7 +74,7 @@ digraph G {
     capture  -> siamese;
     siamese  -> verify [label="embedding"];
     verify   -> decision;
-    verify   -> rppg [style=dashed, label="khi cần eKYC"];
+    verify   -> rppg [style=dashed, label="khi xác thực sinh trắc học khuôn mặt"];
     rppg     -> decision [style=dashed];
     decision -> bank;
 }
@@ -82,9 +82,11 @@ digraph G {
 st.graphviz_chart(DIAGRAM, use_container_width=True)
 
 st.caption(
-    "💡 *Siamese Network (MLP) là kiến trúc trung tâm: học và so khớp «chữ ký hành vi» "
-    "của khách hàng — phát hiện kẻ mạo danh dù biết mật khẩu/OTP. "
-    "rPPG là lớp mở rộng cho luồng eKYC: phát hiện DeepFake/ảnh tĩnh bằng tín hiệu nhịp tim qua da.*"
+    "💡 *Siamese Network (với model MLP) là kiến trúc trung tâm của giải pháp: "
+    "học và so khớp «chữ ký hành vi» của khách hàng — phát hiện kẻ mạo danh "
+    "Chiếm quyền điều khiển tài khoản/thiết bị (ATO). "
+    "Công nghệ rPPG là phần mở rộng cho luồng xác thực khuôn mặt khi chuyển tiền "
+    "Realtime: phát hiện DeepFake bằng tín hiệu nhịp tim qua da.*"
 )
 
 st.write("")
@@ -132,8 +134,9 @@ with c3:
 <h3>💳 AI hỗ trợ Demo</h3>
 <b>Toolbox bổ trợ — Mở rộng</b><br>
 <span style='color:#8C7785;font-size:13px'>LightGBM · SHAP · Gemini</span><br><br>
-Bộ công cụ AI hỗ trợ demo Siamese Network: phân tích giao dịch chuyển tiền,
-chấm điểm rủi ro <b>0–100%</b> kèm <b>SHAP</b> giải thích và chatbot Gemini đối thoại.
+Công cụ AI dùng model <b>LightGBM</b> hỗ trợ demo Siamese Network End-to-End:
+hợp nhất Giải pháp dự báo từng giao dịch <b>Realtime</b> (ứng dụng model LightGBM)
+và Kiến trúc <b>Siamese Network</b> trong thực tế vận hành.
 </div>
         """,
         unsafe_allow_html=True,
