@@ -10,7 +10,7 @@ st.markdown("<div class='hero-tag'>🌸 SINH TRẮC HỌC HÀNH VI · SIAMESE NE
 st.markdown(
     "<div class='hero-title' style='font-size:32px;line-height:1.25;letter-spacing:.3px'>"
     "Hệ thống AI Siamese Network trong xác thực sinh trắc học hành vi<br>"
-    "phòng chống chiếm đoạt tài khoản ngân hàng (ATO)"
+    "phòng chống gian lận chiếm quyền tài khoản (ATO)"
     "</div>",
     unsafe_allow_html=True,
 )
@@ -138,10 +138,10 @@ with c3:
 <div class='pastel-card' style='background:linear-gradient(135deg,#FFF1E6 0%,#FFE6D6 100%)'>
 <h3>💳 AI hỗ trợ Demo</h3>
 <b>Toolbox bổ trợ — Mở rộng</b><br>
-<span style='color:#8C7785;font-size:13px'>LightGBM · SHAP · Gemini</span><br><br>
+<span style='color:#8C7785;font-size:13px'>LightGBM · SHAP</span><br><br>
 Công cụ AI dùng model <b>LightGBM</b> hỗ trợ demo Siamese Network End-to-End:
-hợp nhất Giải pháp dự báo từng giao dịch <b>Realtime</b> (ứng dụng model LightGBM)
-và Kiến trúc <b>Siamese Network</b> trong thực tế vận hành.
+Demo hợp nhất giữa dự báo từng giao dịch <b>Realtime</b> kết hợp Kiến trúc
+<b>Siamese Network</b> trong thực tế vận hành.
 </div>
         """,
         unsafe_allow_html=True,

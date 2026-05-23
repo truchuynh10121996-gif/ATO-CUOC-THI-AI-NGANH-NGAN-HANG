@@ -442,7 +442,7 @@ with tab_demo:
                 "LightGBM hay Siamese đóng vai trò chính trong quyết định này?",
                 "Giải thích cho khách hàng bằng ngôn ngữ phổ thông.",
             ],
-            title="💬 Phân tích của AI (Gemini) — Giải thích quyết định End-to-End",
+            title="💬 Phân tích của chuyên gia AI — Giải thích quyết định End-to-End",
         )
 
 
@@ -642,5 +642,5 @@ with tab_compare:
             "Nên đặt trọng số fusion thế nào cho phân khúc khách hàng cao cấp?",
             "Khi nào nên tin LightGBM hơn Siamese và ngược lại?",
         ],
-        title="💬 Phân tích của Chuyên gia (Gemini) — Diễn giải so sánh số liệu",
+        title="💬 Phân tích của chuyên gia AI — Diễn giải so sánh số liệu",
     )
