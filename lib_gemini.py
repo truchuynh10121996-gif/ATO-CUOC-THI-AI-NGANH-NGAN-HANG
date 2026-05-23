@@ -111,7 +111,7 @@ def render_chat_panel(
     role: str,
     key_prefix: str,
     suggested_questions: list[str] | None = None,
-    title: str = "💬 Phân tích của AI (Gemini)",
+    title: str = "💬 Phân tích của chuyên gia AI",
 ):
     """Vẽ khung chat dưới phần SHAP. Lưu lịch sử trong st.session_state."""
     st.markdown(f"#### {title}")

@@ -589,5 +589,5 @@ with tab_demo:
                  "Tôi nên giải thích thế nào với khách hàng?"),
                 "Khách hàng cần làm gì tiếp theo?",
             ],
-            title="💬 Phân tích của AI (Gemini) — Giải thích cho khách hàng",
+            title="💬 Phân tích của chuyên gia AI — Giải thích cho khách hàng",
         )

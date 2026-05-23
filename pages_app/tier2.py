@@ -634,5 +634,5 @@ with tab_demo:
                 "Khách hàng có cần đổi mật khẩu không?",
                 "Nhân viên cần xác thực thêm gì?",
             ],
-            title="💬 Phân tích của AI (Gemini) — Giải thích hành vi cho khách hàng",
+            title="💬 Phân tích của chuyên gia AI — Giải thích hành vi cho khách hàng",
         )

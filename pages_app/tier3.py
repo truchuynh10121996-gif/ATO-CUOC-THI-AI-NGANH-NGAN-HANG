@@ -377,5 +377,5 @@ with tab_demo:
                 "Khách hàng cần làm gì khi bị từ chối eKYC?",
                 "Giải thích đơn giản cho khách hàng nghĩa là gì?",
             ],
-            title="💬 Phân tích của AI (Gemini) — Giải thích kết quả rPPG",
+            title="💬 Phân tích của chuyên gia AI — Giải thích kết quả rPPG",
         )
