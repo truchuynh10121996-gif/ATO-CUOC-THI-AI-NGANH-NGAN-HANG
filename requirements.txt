@@ -1,5 +1,5 @@
-streamlit>=1.36.0
-numpy>=1.24.0
+streamlit==1.39.0
+numpy>=1.24.0,<2.0.0
 pandas>=2.0.0
 scikit-learn>=1.3.0
 matplotlib>=3.7.0
@@ -12,10 +12,10 @@ lightgbm>=4.1.0
 shap>=0.44.0
 streamlit-shap>=1.0.2
 
-# Tầng 2 — Siamese Network
-tensorflow>=2.13.0
+# Tầng 2 — Siamese Network (tensorflow-cpu nhẹ hơn ~500MB so với tensorflow)
+tensorflow-cpu>=2.13.0,<2.16.0
 
-# Tầng 3 — rPPG (đã loại bỏ Tab 3 + Tab 4 cũ)
+# Tầng 3 — rPPG
 opencv-python-headless>=4.8.0
 
 # Khung chat Gemini
