@@ -9,3 +9,9 @@ venv/
 *.h5
 *.pkl
 *.joblib
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
