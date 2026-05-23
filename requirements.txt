@@ -13,7 +13,8 @@ shap>=0.44.0
 streamlit-shap>=1.0.2
 
 # Tầng 2 — Siamese Network (tensorflow-cpu nhẹ hơn ~500MB so với tensorflow)
-tensorflow-cpu>=2.13.0,<2.16.0
+# TF 2.15 = bản cuối hỗ trợ Python 3.11; pin Python 3.11 trong README frontmatter
+tensorflow-cpu==2.15.1
 
 # Tầng 3 — rPPG
 opencv-python-headless>=4.8.0
