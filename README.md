@@ -8,7 +8,7 @@ sdk_version: 1.39.0
 app_file: app.py
 pinned: false
 license: mit
-short_description: Demo phát hiện gian lận ngân hàng bằng Siamese Network + rPPG
+short_description: Demo Siamese Network + rPPG chong gian lan ngan hang
 ---
 
 # 🧠 Demo Siamese Network — Sinh trắc học hành vi
